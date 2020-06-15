@@ -24,6 +24,7 @@ func (mdb *MongoDB) Init() {
 	if env == "release" {
 		dbpassword := "allofus2020"
 		dbuser := "allofus"
+		dbname = "heroku_g3kd0627"
 		dburl = fmt.Sprintf("mongodb://%s:%s@ds159274.mlab.com:59274/heroku_g3kd0627", dbuser, dbpassword)
 	}
 	DBSession, err := mgo.Dial(dburl)
