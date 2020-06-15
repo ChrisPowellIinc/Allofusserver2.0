@@ -1,11 +1,9 @@
 package db
 
-import "github.com/spankie/aou/models"
-
-// Users holds a list of all users identified by thier IDs
-type Users []models.User
+import "github.com/ChrisPowellIinc/Allofusserver2.0/models"
 
 // DB provides access to the different db
-type DB struct {
-	Users Users
+type DB interface {
+	CreateUser(user models.User) (models.User, error)
+	FindUserByUsername(username string) (models.User, error)
 }
