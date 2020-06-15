@@ -64,6 +64,12 @@ func (q fieldError) String() string {
 }
 
 func (s *Server) setupRouter() *gin.Engine {
+	ginMode := os.Getenv("GIN_MODE")
+	if ginMode == "test" {
+		r := gin.New()
+		s.defineRoutes(r)
+		return r
+	}
 	r := gin.Default()
 	// LoggerWithFormatter middleware will write the logs to gin.DefaultWriter
 	// By default gin.DefaultWriter = os.Stdout
