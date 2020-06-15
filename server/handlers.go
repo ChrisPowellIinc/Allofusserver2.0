@@ -25,7 +25,6 @@ func (s *Server) handleSignup() gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"errors": errs})
 			return
 		}
-		// TODO: validation
 		var err error
 		user.Password, err = bcrypt.GenerateFromPassword([]byte(user.PasswordString), bcrypt.DefaultCost)
 		if err != nil {
