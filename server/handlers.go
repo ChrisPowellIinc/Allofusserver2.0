@@ -19,8 +19,6 @@ func (s *Server) handleSignup() gin.HandlerFunc {
 			errs := []string{}
 			for _, fieldErr := range err.(validator.ValidationErrors) {
 				errs = append(errs, fieldError{fieldErr}.String())
-				// c.JSON(http.StatusBadRequest, fieldError{fieldErr}.String())
-				// return // exit on first error
 			}
 			c.JSON(http.StatusBadRequest, gin.H{"errors": errs})
 			return
@@ -28,6 +26,7 @@ func (s *Server) handleSignup() gin.HandlerFunc {
 		var err error
 		user.Password, err = bcrypt.GenerateFromPassword([]byte(user.PasswordString), bcrypt.DefaultCost)
 		if err != nil {
+			log.Printf("hash password err: %v\n", err)
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"message": "Sorry a problem occured, please try again",
 				"status":  http.StatusInternalServerError,
@@ -36,6 +35,7 @@ func (s *Server) handleSignup() gin.HandlerFunc {
 		}
 		user, err = s.DB.CreateUser(user)
 		if err != nil {
+			log.Printf("create user err: %v\n", err)
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"message": "Sorry a problem occured, please try again",
 				"Status":  http.StatusInternalServerError,
