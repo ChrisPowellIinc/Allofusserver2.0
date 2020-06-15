@@ -37,7 +37,19 @@ func (mdb *MongoDB) Init() {
 // CreateUser creates a new user in the DB
 func (mdb MongoDB) CreateUser(user models.User) (models.User, error) {
 	user.CreatedAt = time.Now()
-	err := mdb.DB.C("user").Insert(&user)
+	_, err := mdb.FindUserByEmail(user.Email)
+	if err != nil {
+		return user, errors.New("email already in use")
+	}
+	_, err = mdb.FindUserByUsername(user.Username)
+	if err != nil {
+		return user, errors.New("username already in use")
+	}
+	_, err = mdb.FindUserByPhone(user.Phone)
+	if err != nil {
+		return user, errors.New("phone number already in use")
+	}
+	err = mdb.DB.C("user").Insert(&user)
 	return user, err
 }
 
@@ -45,5 +57,19 @@ func (mdb MongoDB) CreateUser(user models.User) (models.User, error) {
 func (mdb MongoDB) FindUserByUsername(username string) (models.User, error) {
 	var user models.User
 	err := mdb.DB.C("user").Find(bson.M{"username": username}).One(&user)
+	return user, err
+}
+
+// FindUserByEmail finds a user by the email
+func (mdb MongoDB) FindUserByEmail(email string) (models.User, error) {
+	var user models.User
+	err := mdb.DB.C("user").Find(bson.M{"email": email}).One(&user)
+	return user, err
+}
+
+// FindUserByPhone finds a user by the phone
+func (mdb MongoDB) FindUserByPhone(phone string) (models.User, error) {
+	var user models.User
+	err := mdb.DB.C("user").Find(bson.M{"phone": phone}).One(&user)
 	return user, err
 }
