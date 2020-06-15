@@ -5,16 +5,16 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/spankie/aou/db"
-	"github.com/spankie/aou/router"
+	"github.com/ChrisPowellIinc/Allofusserver2.0/db"
+	"github.com/ChrisPowellIinc/Allofusserver2.0/router"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestPingRoute(t *testing.T) {
+	DB := db.MongoDB{}
+	DB.Init()
 	s := &Server{
-		DB: db.DB{
-			Users: make(db.Users, 0),
-		},
+		DB:     DB,
 		Router: router.NewRouter(),
 	}
 	router := s.setupRouter()
