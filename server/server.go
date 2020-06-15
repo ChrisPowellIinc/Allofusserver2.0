@@ -8,12 +8,14 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/ChrisPowellIinc/Allofusserver2.0/db"
+	"github.com/ChrisPowellIinc/Allofusserver2.0/router"
 	"github.com/gin-gonic/gin"
-	"github.com/spankie/aou/db"
-	"github.com/spankie/aou/router"
+	"github.com/go-playground/validator"
 )
 
 type Server struct {
@@ -34,21 +36,65 @@ func (s *Server) decode(w http.ResponseWriter, r *http.Request, v interface{}) e
 }
 
 func (s *Server) defineRoutes(router *gin.Engine) {
-	router.GET("/auth/signup", s.handleSignup())
+	router.POST("/auth/signup", s.handleSignup())
 	router.POST("/auth/login", s.handleLogin())
+}
+
+// fieldErrors
+type fieldError struct {
+	err validator.FieldError
+}
+
+func (q fieldError) String() string {
+	var sb strings.Builder
+
+	sb.WriteString("validation failed on field '" + q.err.Field() + "'")
+	sb.WriteString(", condition: " + q.err.ActualTag())
+
+	// Print condition parameters, e.g. oneof=red blue -> { red blue }
+	if q.err.Param() != "" {
+		sb.WriteString(" { " + q.err.Param() + " }")
+	}
+
+	if q.err.Value() != nil && q.err.Value() != "" {
+		sb.WriteString(fmt.Sprintf(", actual: %v", q.err.Value()))
+	}
+
+	return sb.String()
 }
 
 func (s *Server) setupRouter() *gin.Engine {
 	r := gin.Default()
+	// LoggerWithFormatter middleware will write the logs to gin.DefaultWriter
+	// By default gin.DefaultWriter = os.Stdout
+	r.Use(gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
+		// your custom format
+		return fmt.Sprintf("%s - [%s] \"%s %s %s %d %s \"%s\" %s\"\n",
+			param.ClientIP,
+			param.TimeStamp.Format(time.RFC1123),
+			param.Method,
+			param.Path,
+			param.Request.Proto,
+			param.StatusCode,
+			param.Latency,
+			param.Request.UserAgent(),
+			param.ErrorMessage,
+		)
+	}))
 	s.defineRoutes(r)
 	return r
 }
 
+// Start starts the whole server by preparing everything it needs
+// like router
 func (s *Server) Start() {
 	r := s.setupRouter()
-	// r.Run() // listen and serve on 0.0.0.0:8080 (for windows "localhost:8080")
+	PORT := os.Getenv("PORT")
+	if PORT == "" {
+		PORT = ":8080"
+	}
 	srv := &http.Server{
-		Addr:    ":8080",
+		Addr:    PORT,
 		Handler: r,
 	}
 
@@ -59,6 +105,8 @@ func (s *Server) Start() {
 			log.Fatalf("listen: %s\n", err)
 		}
 	}()
+
+	log.Printf("Server started on %s\n", PORT)
 
 	// Wait for interrupt signal to gracefully shutdown the server with
 	// a timeout of 5 seconds.
