@@ -95,8 +95,8 @@ func (s *Server) setupRouter() *gin.Engine {
 // like router
 func (s *Server) Start() {
 	r := s.setupRouter()
-	PORT := os.Getenv("PORT")
-	if PORT == "" {
+	PORT := fmt.Sprintf(":%s", os.Getenv("PORT"))
+	if PORT == ":" {
 		PORT = ":8080"
 	}
 	srv := &http.Server{
