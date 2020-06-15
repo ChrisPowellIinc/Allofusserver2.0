@@ -30,6 +30,7 @@ func (mdb MongoDB) CreateUser(user models.User) (models.User, error) {
 	return user, err
 }
 
+// FindUserByUsername finds a user by the username
 func (mdb MongoDB) FindUserByUsername(username string) (models.User, error) {
 	var user models.User
 	err := mdb.DB.C("user").Find(bson.M{"username": username}).One(&user)
