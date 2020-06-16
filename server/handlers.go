@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/ChrisPowellIinc/Allofusserver2.0/db"
 	"github.com/ChrisPowellIinc/Allofusserver2.0/models"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
@@ -36,6 +37,14 @@ func (s *Server) handleSignup() gin.HandlerFunc {
 		user, err = s.DB.CreateUser(user)
 		if err != nil {
 			log.Printf("create user err: %v\n", err)
+			err, ok := err.(db.ValidationError)
+			if ok {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"message": err.Error(),
+					"Status":  http.StatusBadRequest,
+				})
+				return
+			}
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"message": "Sorry a problem occured, please try again",
 				"Status":  http.StatusInternalServerError,
