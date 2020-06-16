@@ -39,15 +39,15 @@ func (mdb MongoDB) CreateUser(user models.User) (models.User, error) {
 	user.CreatedAt = time.Now()
 	_, err := mdb.FindUserByEmail(user.Email)
 	if err == nil {
-		return user, errors.New("email already in use")
+		return user, ValidationError{Field: "email", Message: "already in use"}
 	}
 	_, err = mdb.FindUserByUsername(user.Username)
 	if err == nil {
-		return user, errors.New("username already in use")
+		return user, ValidationError{Field: "username", Message: "already in use"}
 	}
 	_, err = mdb.FindUserByPhone(user.Phone)
 	if err == nil {
-		return user, errors.New("phone number already in use")
+		return user, ValidationError{Field: "phone", Message: "already in use"}
 	}
 	err = mdb.DB.C("user").Insert(&user)
 	return user, err
