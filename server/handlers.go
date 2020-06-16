@@ -40,8 +40,8 @@ func (s *Server) handleSignup() gin.HandlerFunc {
 			err, ok := err.(db.ValidationError)
 			if ok {
 				c.JSON(http.StatusInternalServerError, gin.H{
-					"message": err.Error(),
-					"Status":  http.StatusBadRequest,
+					"errors": []string{err.Error()},
+					"Status": http.StatusBadRequest,
 				})
 				return
 			}
