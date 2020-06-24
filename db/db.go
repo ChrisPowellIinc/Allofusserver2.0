@@ -10,6 +10,8 @@ import (
 type DB interface {
 	CreateUser(user models.User) (models.User, error)
 	FindUserByUsername(username string) (models.User, error)
+	FindUserByEmail(email string) (models.User, error)
+	PutInBlackList(blacklist models.Blacklist) error //TODO might remove this?
 }
 
 // ValidationError defines error that occur due to validation

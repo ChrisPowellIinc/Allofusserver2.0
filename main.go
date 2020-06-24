@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	DB := db.MongoDB{}
+	DB := &db.MongoDB{}
 	DB.Init()
 	s := &server.Server{
 		DB:     DB,

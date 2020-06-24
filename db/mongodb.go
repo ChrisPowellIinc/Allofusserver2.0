@@ -35,7 +35,7 @@ func (mdb *MongoDB) Init() {
 }
 
 // CreateUser creates a new user in the DB
-func (mdb MongoDB) CreateUser(user models.User) (models.User, error) {
+func (mdb *MongoDB) CreateUser(user models.User) (models.User, error) {
 	user.CreatedAt = time.Now()
 	_, err := mdb.FindUserByEmail(user.Email)
 	if err == nil {
@@ -54,7 +54,7 @@ func (mdb MongoDB) CreateUser(user models.User) (models.User, error) {
 }
 
 // FindUserByUsername finds a user by the username
-func (mdb MongoDB) FindUserByUsername(username string) (models.User, error) {
+func (mdb *MongoDB) FindUserByUsername(username string) (models.User, error) {
 	var user models.User
 	err := mdb.DB.C("user").Find(bson.M{"username": username}).One(&user)
 	return user, err
@@ -72,4 +72,9 @@ func (mdb MongoDB) FindUserByPhone(phone string) (models.User, error) {
 	var user models.User
 	err := mdb.DB.C("user").Find(bson.M{"phone": phone}).One(&user)
 	return user, err
+}
+
+// PutInBlackList puts blacklist into the blacklist collection
+func (mdb *MongoDB) PutInBlackList(blacklist models.Blacklist) error {
+	return mdb.DB.C("blacklist").Insert(&blacklist)
 }
