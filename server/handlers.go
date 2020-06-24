@@ -3,6 +3,7 @@ package server
 import (
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/ChrisPowellIinc/Allofusserver2.0/models"
 	"github.com/dgrijalva/jwt-go"
@@ -10,6 +11,9 @@ import (
 	"github.com/go-playground/validator"
 	"golang.org/x/crypto/bcrypt"
 )
+
+// TODO: use env variables to store secret
+const JWTSecret = "JWTSecret"
 
 func (s *Server) handleSignup() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -88,8 +92,7 @@ func (s *Server) handleLogin() gin.HandlerFunc {
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"user_email": user.Email})
 
 		// Sign and get the complete encoded token as a string using the secret
-		// TODO: use env variables to store secret
-		tokenString, err := token.SignedString([]byte("JWTSecret"))
+		tokenString, err := token.SignedString([]byte(JWTSecret))
 
 		// _, token, err := jwt.TokenAuth.Encode(jwtauth.Claims{"user_email": user.Email})
 
@@ -108,6 +111,9 @@ func (s *Server) handleLogin() gin.HandlerFunc {
 		// 	"username":   user.Username,
 		// 	"image":      user.Image,
 		// },
+
+		//change user status to active
+		user.Status = "active"
 		c.JSON(http.StatusOK, gin.H{
 			"message": "login successful",
 			"data": map[string]interface{}{
@@ -115,5 +121,57 @@ func (s *Server) handleLogin() gin.HandlerFunc {
 				"token": tokenString,
 			},
 		})
+	}
+}
+
+func (s *Server) handleLogout() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var blacklist models.Blacklist
+		// if err := c.ShouldBindJSON(&blacklist); err != nil {
+		// 	errs := []string{}
+		// 	if err, ok := err.(validator.ValidationErrors); ok {
+		// 		for _, fieldErr := range err {
+		// 			errs = append(errs, fieldError{fieldErr}.String())
+		// 		}
+		// 		c.JSON(http.StatusBadRequest, gin.H{"errors": errs})
+		// 		return
+		// 	}
+		// 	c.JSON(http.StatusUnauthorized, gin.H{"errors": []string{"username or password incorrect"}})
+		// 	return
+		// }
+
+		authHeader := c.Request.Header.Get("Authorization")
+		claims := jwt.MapClaims{}
+		token, err := jwt.ParseWithClaims(authHeader, claims, func(token *jwt.Token) (interface{}, error) {
+			return []byte(JWTSecret), nil
+		})
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"unauthorized token": err}) //TODO make this meaningful
+		}
+
+		if email, ok := claims["user_email"].(string); ok {
+			user, err := s.DB.FindUserByEmail(email)
+			if err != nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": err})
+				return
+			}
+			if user.Status != "active" {
+				c.JSON(http.StatusForbidden, gin.H{"errors": "user already logged out"})
+				return
+			}
+			user.Status = "inactive"
+
+			blacklist.Email = email
+			blacklist.CreatedAt = time.Now()
+			blacklist.Token = token.Raw
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "a type error occurred"})
+			return
+		}
+
+		if err = s.DB.PutInBlackList(blacklist); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"logout failed": err})
+			return
+		}
 	}
 }
