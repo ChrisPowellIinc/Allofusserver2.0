@@ -34,10 +34,13 @@ type User struct {
 // create middleware that would check that there is token in the request header (Authorization: Bearer token)
 // verify the token.
 // make sure you check the db for the email and make sure the status is active.
+//TODO but we dont check the status tho?
 
 // type blacklist struct {email string, token: string, created_at, time.Time}
 // Logout method: get the token and save it in the blacklist collection.
 
+//
+//
 // Profile page where user details would be shown and updated.
 // Timeline page: list all the users, and get each user details
 // User details page: show details of a user
