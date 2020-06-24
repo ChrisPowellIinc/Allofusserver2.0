@@ -64,6 +64,10 @@ func (mdb *MongoDB) FindUserByUsername(username string) (models.User, error) {
 func (mdb MongoDB) FindUserByEmail(email string) (models.User, error) {
 	var user models.User
 	err := mdb.DB.C("user").Find(bson.M{"email": email}).One(&user)
+	if user.Status != "active" {
+		// c.JSON(http.StatusForbidden, gin.H{"errors": "user already logged out"})
+		return models.User{}, errors.New("user not activated")
+	}
 	return user, err
 }
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/ChrisPowellIinc/Allofusserver2.0/db"
 	"github.com/ChrisPowellIinc/Allofusserver2.0/models"
+	"github.com/ChrisPowellIinc/Allofusserver2.0/services"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator"
@@ -19,7 +20,6 @@ const JWTSecret = "JWTSecret"
 func (s *Server) handleSignup() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var user models.User
-
 		if err := c.ShouldBindJSON(&user); err != nil {
 			errs := []string{}
 			for _, fieldErr := range err.(validator.ValidationErrors) {
@@ -135,51 +135,37 @@ func (s *Server) handleLogin() gin.HandlerFunc {
 
 func (s *Server) handleLogout() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var blacklist models.Blacklist
-		// if err := c.ShouldBindJSON(&blacklist); err != nil {
-		// 	errs := []string{}
-		// 	if err, ok := err.(validator.ValidationErrors); ok {
-		// 		for _, fieldErr := range err {
-		// 			errs = append(errs, fieldError{fieldErr}.String())
-		// 		}
-		// 		c.JSON(http.StatusBadRequest, gin.H{"errors": errs})
-		// 		return
-		// 	}
-		// 	c.JSON(http.StatusUnauthorized, gin.H{"errors": []string{"username or password incorrect"}})
-		// 	return
-		// }
-
-		authHeader := c.Request.Header.Get("Authorization")
+		tokenString := c.Request.Header.Get("Authorization")
 		claims := jwt.MapClaims{}
-		token, err := jwt.ParseWithClaims(authHeader, claims, func(token *jwt.Token) (interface{}, error) {
-			return []byte(JWTSecret), nil
-		})
+		token, err := services.VerifyToken(tokenString, claims, JWTSecret)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"unauthorized token": err}) //TODO make this meaningful
+			log.Printf("error getting token: %v\n", err)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"}) //TODO make this meaningful
+			return
 		}
 
 		if email, ok := claims["user_email"].(string); ok {
-			user, err := s.DB.FindUserByEmail(email)
+			_, err := s.DB.FindUserByEmail(email)
 			if err != nil {
 				c.JSON(http.StatusNotFound, gin.H{"error": err})
 				return
 			}
-			if user.Status != "active" {
-				c.JSON(http.StatusForbidden, gin.H{"errors": "user already logged out"})
-				return
-			}
-			user.Status = "inactive"
-
+			// if user.Status != "active" {
+			// 	c.JSON(http.StatusForbidden, gin.H{"errors": "user already logged out"})
+			// 	return
+			// }
+			// user.Status = "inactive"
+			var blacklist models.Blacklist
 			blacklist.Email = email
 			blacklist.CreatedAt = time.Now()
 			blacklist.Token = token.Raw
+			if err = s.DB.PutInBlackList(blacklist); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"logout failed": err})
+				return
+			}
 		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "a type error occurred"})
-			return
-		}
-
-		if err = s.DB.PutInBlackList(blacklist); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"logout failed": err})
+			log.Printf("user email is not string\n")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 			return
 		}
 	}

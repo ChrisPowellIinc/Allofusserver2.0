@@ -14,6 +14,7 @@ import (
 
 	"github.com/ChrisPowellIinc/Allofusserver2.0/db"
 	"github.com/ChrisPowellIinc/Allofusserver2.0/router"
+	"github.com/ChrisPowellIinc/Allofusserver2.0/server/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator"
 )
@@ -36,8 +37,11 @@ func (s *Server) decode(w http.ResponseWriter, r *http.Request, v interface{}) e
 }
 
 func (s *Server) defineRoutes(router *gin.Engine) {
+	router.Use(middleware.Authorize)
 	router.POST("/auth/signup", s.handleSignup())
 	router.POST("/auth/login", s.handleLogin())
+	authorized := router.Group("/")
+	authorized.GET("/home") // testing the authorized route
 }
 
 // fieldErrors
