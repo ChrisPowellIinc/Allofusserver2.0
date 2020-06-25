@@ -23,8 +23,6 @@ func (s *Server) handleSignup() gin.HandlerFunc {
 			errs := []string{}
 			for _, fieldErr := range err.(validator.ValidationErrors) {
 				errs = append(errs, fieldError{fieldErr}.String())
-				// c.JSON(http.StatusBadRequest, fieldError{fieldErr}.String())
-				// return // exit on first error
 			}
 			c.JSON(http.StatusBadRequest, gin.H{"errors": errs})
 			return
@@ -160,6 +158,33 @@ func (s *Server) showProfile() gin.HandlerFunc {
 					"image":      user.Image,
 					"username":   user.Username,
 				})
+				return
+			}
+		}
+		log.Printf("can't get user from context\n")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+	}
+}
+
+func (s *Server) updateUserDetails() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var updteUser *models.User
+		if err := c.ShouldBindJSON(updteUser); err != nil {
+			errs := []string{}
+			for _, fieldErr := range err.(validator.ValidationErrors) {
+				errs = append(errs, fieldError{fieldErr}.String())
+			}
+			c.JSON(http.StatusBadRequest, gin.H{"errors": errs})
+			return
+		}
+
+		if userI, exists := c.Get("user"); exists {
+			if user, ok := userI.(*models.User); ok {
+
+				if err := s.DB.UpdateUser(user, updteUser); err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+					return
+				}
 				return
 			}
 		}
