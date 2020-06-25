@@ -10,7 +10,10 @@ import (
 // GetTokenFromHeader returns the token string in the authorization header
 func GetTokenFromHeader(c *gin.Context) string {
 	authHeader := c.Request.Header.Get("Authorization")
-	return authHeader[7:]
+	if authHeader != "" && len(authHeader) > 8 { //TODO good?
+		return authHeader[7:]
+	}
+	return ""
 }
 
 //TODO more research on verifying tokens
@@ -25,12 +28,15 @@ func VerifyToken(tokenString string, claims jwt.MapClaims, secret string) (*jwt.
 	})
 }
 
-// AuthorizeAndGetClaims authorizes a context and returns the claims in its token
-func AuthorizeAndGetClaims(c *gin.Context, secret string) (jwt.MapClaims, error) {
-	tokenString := GetTokenFromHeader(c)
-	claims := jwt.MapClaims{}
-	if _, err := VerifyToken(tokenString, claims, secret); err != nil {
-		return nil, fmt.Errorf("error getting token: %v", err)
+// AuthorizeGetClaimsAndToken authorizes a context and returns the claims in its token
+func AuthorizeGetClaimsAndToken(c *gin.Context, secret string) (jwt.MapClaims, *jwt.Token, error) {
+	if tokenString := GetTokenFromHeader(c); tokenString != "" {
+		claims := jwt.MapClaims{}
+		token, err := VerifyToken(tokenString, claims, secret)
+		if err != nil {
+			return nil, nil, fmt.Errorf("error getting token: %v", err)
+		}
+		return claims, token, nil
 	}
-	return claims, nil
+	return nil, nil, fmt.Errorf("token invalid")
 }
