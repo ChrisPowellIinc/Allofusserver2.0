@@ -142,13 +142,13 @@ func (s *Server) handleLogout() gin.HandlerFunc {
 				return
 			}
 
-			blacklist := models.Blacklist{}
+			blacklist := &models.Blacklist{}
 			blacklist.Email = email
 			blacklist.CreatedAt = time.Now()
 			blacklist.Token = token.Raw
 
 			if err = s.DB.AddToBlackList(blacklist); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"logout failed": err})
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "logout failed"})
 				return
 			}
 		} else {
@@ -161,36 +161,37 @@ func (s *Server) handleLogout() gin.HandlerFunc {
 
 func (s *Server) showProfile() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		tokenString := services.GetTokenFromHeader(c)
-		claims := jwt.MapClaims{}
-		_, err := services.VerifyToken(tokenString, claims, JWTSecret)
+		claims, err := services.AuthorizeAndGetClaims(c, JWTSecret)
 		if err != nil {
-			log.Printf("error getting token: %v\n", err)
+			log.Println(err)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-			return
 		}
 
-		email := struct {
-			Email string `json:"email"`
-		}{}
-		if err := c.ShouldBindJSON(&email); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err})
+		if email, ok := claims["user_email"].(string); ok {
+			user, err := s.DB.FindUserByEmail(email)
+			if err != nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": err})
+				return
+			}
+
+			c.JSON(http.StatusOK, gin.H{
+				"email":      user.Email,
+				"phone":      user.Phone,
+				"first_name": user.FirstName,
+				"last_name":  user.LastName,
+				"image":      user.Image, //TODO shouldn't image be a []byte?
+				"username":   user.Username,
+			})
 			return
 		}
+		log.Printf("user email is not string\n")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+	}
+}
 
-		user, err := s.DB.FindUserByEmail(email.Email)
-		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": err})
-			return
-		}
+//part of tasks, but i'm guessing this is for sysadmins only?
+func (s *Server) showUserDetails() gin.HandlerFunc {
+	return func(c *gin.Context) {
 
-		c.JSON(http.StatusOK, gin.H{
-			"email":      email.Email,
-			"phone":      user.Phone,
-			"first_name": user.FirstName,
-			"last_name":  user.LastName,
-			"image":      user.Image, //TODO shouldn't image be a []byte?
-			"username":   user.Username,
-		})
 	}
 }
