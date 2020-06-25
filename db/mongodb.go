@@ -47,6 +47,11 @@ func (mdb *MongoDB) FindUserByEmail(email string) (*models.User, error) {
 	return user, err
 }
 
+// UpdateUser updates the src document to dest in the user collection
+func (mdb *MongoDB) UpdateUser(src *models.User, dest *models.User) error {
+	return mdb.DB.C("user").Update(src, dest)
+}
+
 // AddToBlackList puts blacklist into the blacklist collection
 func (mdb *MongoDB) AddToBlackList(blacklist *models.Blacklist) error {
 	return mdb.DB.C("blacklist").Insert(blacklist)
