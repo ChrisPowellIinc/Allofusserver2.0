@@ -47,7 +47,7 @@ func (mdb *MongoDB) FindUserByEmail(email string) (*models.User, error) {
 	return user, err
 }
 
-// AddInBlackList puts blacklist into the blacklist collection
-func (mdb *MongoDB) AddToBlackList(blacklist models.Blacklist) error {
-	return mdb.DB.C("blacklist").Insert(&blacklist)
+// AddToBlackList puts blacklist into the blacklist collection
+func (mdb *MongoDB) AddToBlackList(blacklist *models.Blacklist) error {
+	return mdb.DB.C("blacklist").Insert(blacklist)
 }
