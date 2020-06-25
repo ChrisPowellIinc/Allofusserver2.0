@@ -13,7 +13,7 @@ import (
 // Authorize authorizes a request
 func Authorize(findUserByEmail func(string) (*models.User, error)) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		claims, err := services.AuthorizeAndGetClaims(c, os.Getenv("JWTSecret"))
+		claims, token, err := services.AuthorizeGetClaimsAndToken(c, os.Getenv("JWTSecret"))
 		if err != nil {
 			log.Printf("%v\n", err)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
@@ -41,6 +41,7 @@ func Authorize(findUserByEmail func(string) (*models.User, error)) gin.HandlerFu
 		// so that the actions can use the claims from jwt token or the user
 		c.Set("user", user)
 		c.Set("claims", claims)
+		c.Set("token", token)
 		// calling next handler
 		c.Next()
 	}
