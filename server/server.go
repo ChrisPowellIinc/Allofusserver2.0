@@ -37,9 +37,11 @@ func (s *Server) decode(w http.ResponseWriter, r *http.Request, v interface{}) e
 }
 
 func (s *Server) defineRoutes(router *gin.Engine) {
-	router.Use(middleware.Authorize)
-	router.POST("/auth/signup", s.handleSignup())
-	router.POST("/auth/login", s.handleLogin())
+	apirouter := router.Group("/api/v1")
+	apirouter.Use(middleware.Authorize)
+	apirouter.POST("/auth/signup", s.handleSignup())
+	apirouter.POST("/auth/login", s.handleLogin())
+
 	authorized := router.Group("/")
 	authorized.GET("/home") // testing the authorized route
 }
