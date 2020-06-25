@@ -40,7 +40,7 @@ func Authorize(findUserByEmail func(string) (*models.User, error)) gin.HandlerFu
 		// set the claims and user as context parameters.
 		// so that the actions can use the claims from jwt token or the user
 		c.Set("user", user)
-		c.Set("claims", claims)
+		c.Set("claims", claims) //TODO remove this?...we dont use it
 		c.Set("token", token)
 		// calling next handler
 		c.Next()
