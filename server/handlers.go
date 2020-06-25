@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/ChrisPowellIinc/Allofusserver2.0/models"
-	"github.com/ChrisPowellIinc/Allofusserver2.0/services"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator"
@@ -126,65 +125,45 @@ func (s *Server) handleLogin() gin.HandlerFunc {
 
 func (s *Server) handleLogout() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		tokenString := services.GetTokenFromHeader(c)
-		claims := jwt.MapClaims{}
-		token, err := services.VerifyToken(tokenString, claims, JWTSecret)
-		if err != nil {
-			log.Printf("error getting token: %v\n", err)
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-			return
-		}
 
-		if email, ok := claims["user_email"].(string); ok {
-			_, err := s.DB.FindUserByEmail(email)
-			if err != nil {
-				c.JSON(http.StatusNotFound, gin.H{"error": err})
-				return
+		if tokenI, exists := c.Get("token"); exists {
+			if userI, exists := c.Get("user"); exists {
+				if user, ok := userI.(*models.User); ok {
+					if token, ok := tokenI.(*jwt.Token); ok {
+						blacklist := &models.Blacklist{}
+						blacklist.Email = user.Email
+						blacklist.CreatedAt = time.Now()
+						blacklist.Token = token.Raw
+
+						if err := s.DB.AddToBlackList(blacklist); err != nil {
+							c.JSON(http.StatusInternalServerError, gin.H{"error": "logout failed"})
+							return
+						}
+					}
+				}
 			}
-
-			blacklist := &models.Blacklist{}
-			blacklist.Email = email
-			blacklist.CreatedAt = time.Now()
-			blacklist.Token = token.Raw
-
-			if err = s.DB.AddToBlackList(blacklist); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "logout failed"})
-				return
-			}
-		} else {
-			log.Printf("user email is not string\n")
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
-			return
 		}
+		log.Printf("can't get info from context\n")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
 	}
 }
-
 func (s *Server) showProfile() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		claims, err := services.AuthorizeAndGetClaims(c, JWTSecret)
-		if err != nil {
-			log.Println(err)
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		}
-
-		if email, ok := claims["user_email"].(string); ok {
-			user, err := s.DB.FindUserByEmail(email)
-			if err != nil {
-				c.JSON(http.StatusNotFound, gin.H{"error": err})
+		if userI, exists := c.Get("user"); exists {
+			if user, ok := userI.(*models.User); ok {
+				c.JSON(http.StatusOK, gin.H{
+					"email":      user.Email,
+					"phone":      user.Phone,
+					"first_name": user.FirstName,
+					"last_name":  user.LastName,
+					"image":      user.Image,
+					"username":   user.Username,
+				})
 				return
 			}
-
-			c.JSON(http.StatusOK, gin.H{
-				"email":      user.Email,
-				"phone":      user.Phone,
-				"first_name": user.FirstName,
-				"last_name":  user.LastName,
-				"image":      user.Image, //TODO shouldn't image be a []byte?
-				"username":   user.Username,
-			})
-			return
 		}
-		log.Printf("user email is not string\n")
+		log.Printf("can't get user from context\n")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 	}
 }
