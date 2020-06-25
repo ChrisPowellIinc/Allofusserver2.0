@@ -58,8 +58,8 @@ func (s *Server) handleLogin() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var user *models.User
 		type Login struct {
-			Username string `json:"username"`
-			Password string `json:"password"`
+			Username string `json:"username" binding:"required"`
+			Password string `json:"password" binding:"required"`
 		}
 		var loginRequest Login
 		if err := c.ShouldBindJSON(&loginRequest); err != nil {
@@ -186,12 +186,5 @@ func (s *Server) showProfile() gin.HandlerFunc {
 		}
 		log.Printf("user email is not string\n")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
-	}
-}
-
-//part of tasks, but i'm guessing this is for sysadmins only?
-func (s *Server) showUserDetails() gin.HandlerFunc {
-	return func(c *gin.Context) {
-
 	}
 }
