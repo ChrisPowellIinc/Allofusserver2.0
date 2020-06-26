@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/ChrisPowellIinc/Allofusserver2.0/models"
-	srverrors "github.com/ChrisPowellIinc/Allofusserver2.0/server/errors"
+	"github.com/ChrisPowellIinc/Allofusserver2.0/servererrors"
 	"github.com/globalsign/mgo"
 	"github.com/globalsign/mgo/bson"
 	"github.com/pkg/errors"
@@ -58,6 +58,9 @@ func (mdb *MongoDB) CreateUser(user *models.User) (*models.User, error) {
 func (mdb *MongoDB) FindUserByUsername(username string) (*models.User, error) {
 	user := &models.User{}
 	err := mdb.DB.C("user").Find(bson.M{"username": username}).One(user)
+	if user.Status != "active" {
+		return nil, servererrors.NewInActiveUserError("user is inactive")
+	}
 	return user, err
 }
 
@@ -66,7 +69,7 @@ func (mdb *MongoDB) FindUserByEmail(email string) (*models.User, error) {
 	user := &models.User{}
 	err := mdb.DB.C("user").Find(bson.M{"email": email}).One(user)
 	if user.Status != "active" {
-		return &models.User{}, srverrors.NewInActiveUserError("user is inactive")
+		return nil, servererrors.NewInActiveUserError("user is inactive")
 	}
 	return user, err
 }
