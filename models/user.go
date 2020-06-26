@@ -13,7 +13,9 @@ type User struct {
 	PasswordString string    `json:"password,omitempty" bson:"-" binding:"required" form:"password"`
 	Reset          string    `json:"-" bson:"reset"`
 	Image          string    `json:"image,omitempty" bson:"image,omitempty"`
+	Status         string    `json:"status,omitempty"`
 	CreatedAt      time.Time `json:"created_at,omitempty" bson:"created_at,omitempty"`
+	UpdatedAt      time.Time `json:"updated_at,omitempty"`
 	AccessToken    string    `json:"token,omitempty" bson:"token,omitempty"`
 	// stripe payment details
 	SessionID       string `json:"session_id,omitempty" bson:"session_id,omitempty"`
