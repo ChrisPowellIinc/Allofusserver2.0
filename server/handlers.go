@@ -17,7 +17,7 @@ import (
 
 func (s *Server) handleSignup() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		user := &models.User{}
+		user := &models.User{Status: "active"}
 
 		if err := c.ShouldBindJSON(user); err != nil {
 			errs := []string{}
