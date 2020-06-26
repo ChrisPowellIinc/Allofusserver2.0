@@ -8,10 +8,12 @@ import (
 
 // DB provides access to the different db
 type DB interface {
-	CreateUser(user models.User) (models.User, error)
-	FindUserByUsername(username string) (models.User, error)
-	FindUserByEmail(email string) (models.User, error)
-	PutInBlackList(blacklist models.Blacklist) error //TODO might remove this?
+	CreateUser(user *models.User) (*models.User, error)
+	FindUserByUsername(username string) (*models.User, error)
+	FindUserByEmail(email string) (*models.User, error)
+	UpdateUser(user *models.User) error
+	AddToBlackList(blacklist *models.Blacklist) error //TODO might remove this?
+	FindAllUsersExcept(except string) ([]models.User, error)
 }
 
 // ValidationError defines error that occur due to validation
