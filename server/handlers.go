@@ -197,6 +197,7 @@ func (s *Server) handleUpdateUserDetails() gin.HandlerFunc {
 					return
 				}
 				user.Username, user.Email = username, email
+				user.UpdatedAt = time.Now()
 				if err := s.DB.UpdateUser(user); err != nil {
 					log.Printf("update user error : %v\n", err)
 					c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
@@ -227,6 +228,44 @@ func (s *Server) handleGetUsers() gin.HandlerFunc {
 			}
 		}
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+}
+
+func (s *Server) handleGetUserByUsername() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		name := &struct {
+			Username string `json:"username,omitempty" binding:"required"`
+		}{}
+		if err := c.ShouldBindJSON(name); err != nil {
+			errs := []string{}
+			for _, fieldErr := range err.(validator.ValidationErrors) {
+				errs = append(errs, fieldError{fieldErr}.String())
+			}
+			c.JSON(http.StatusBadRequest, gin.H{"errors": errs})
+			return
+		}
+
+		user, err := s.DB.FindUserByUsername(name.Username)
+		if err != nil {
+			log.Printf("find user error : %v\n", err)
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
+
+		if user.Status != "active" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "user not activated"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"email":      user.Email,
+			"phone":      user.Phone,
+			"first_name": user.FirstName,
+			"last_name":  user.LastName,
+			"image":      user.Image,
+			"username":   user.Username,
+		})
 		return
 	}
 }
