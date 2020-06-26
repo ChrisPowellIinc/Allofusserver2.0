@@ -98,7 +98,7 @@ func (s *Server) handleLogin() gin.HandlerFunc {
 			c.JSON(http.StatusUnauthorized, gin.H{"errors": []string{"username or password incorrect"}})
 			return
 		}
-		//TODO why do you []byte user.Password?...its already a []byte
+		log.Printf("%v\n%s\n", user.Password, string(user.Password))
 		err = bcrypt.CompareHashAndPassword(user.Password, []byte(loginRequest.Password))
 		if err != nil {
 			log.Printf("passwords do not match %v\n", err)
