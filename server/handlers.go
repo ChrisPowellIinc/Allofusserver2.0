@@ -8,7 +8,7 @@ import (
 
 	"github.com/ChrisPowellIinc/Allofusserver2.0/db"
 	"github.com/ChrisPowellIinc/Allofusserver2.0/models"
-	"github.com/ChrisPowellIinc/Allofusserver2.0/server/errors"
+	"github.com/ChrisPowellIinc/Allofusserver2.0/servererrors"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 	validator "github.com/go-playground/validator/v10"
@@ -24,7 +24,7 @@ func (s *Server) handleSignup() gin.HandlerFunc {
 			verr, ok := err.(validator.ValidationErrors)
 			if ok {
 				for _, fieldErr := range verr {
-					errs = append(errs, errors.NewFieldError(fieldErr).String())
+					errs = append(errs, servererrors.NewFieldError(fieldErr).String())
 				}
 			} else {
 				errs = append(errs, "internal server error")
@@ -78,7 +78,7 @@ func (s *Server) handleLogin() gin.HandlerFunc {
 			errs := []string{}
 			if err, ok := err.(validator.ValidationErrors); ok {
 				for _, fieldErr := range err {
-					errs = append(errs, errors.NewFieldError(fieldErr).String())
+					errs = append(errs, servererrors.NewFieldError(fieldErr).String())
 				}
 				c.JSON(http.StatusBadRequest, gin.H{"errors": errs})
 			} else {
@@ -140,11 +140,11 @@ func (s *Server) handleLogout() gin.HandlerFunc {
 		if tokenI, exists := c.Get("token"); exists {
 			if userI, exists := c.Get("user"); exists {
 				if user, ok := userI.(*models.User); ok {
-					if token, ok := tokenI.(*jwt.Token); ok {
+					if token, ok := tokenI.(string); ok {
 						blacklist := &models.Blacklist{}
 						blacklist.Email = user.Email
 						blacklist.CreatedAt = time.Now()
-						blacklist.Token = token.Raw
+						blacklist.Token = token
 
 						err := s.DB.AddToBlackList(blacklist)
 						if err != nil {
@@ -193,7 +193,7 @@ func (s *Server) handleUpdateUserDetails() gin.HandlerFunc {
 				if err := c.ShouldBindJSON(user); err != nil {
 					errs := []string{}
 					for _, fieldErr := range err.(validator.ValidationErrors) {
-						errs = append(errs, errors.NewFieldError(fieldErr).String())
+						errs = append(errs, servererrors.NewFieldError(fieldErr).String())
 					}
 					c.JSON(http.StatusBadRequest, gin.H{"errors": errs})
 					return
@@ -242,7 +242,7 @@ func (s *Server) handleGetUserByUsername() gin.HandlerFunc {
 		if err := c.ShouldBindJSON(name); err != nil {
 			errs := []string{}
 			for _, fieldErr := range err.(validator.ValidationErrors) {
-				errs = append(errs, errors.NewFieldError(fieldErr).String())
+				errs = append(errs, servererrors.NewFieldError(fieldErr).String())
 			}
 			c.JSON(http.StatusBadRequest, gin.H{"errors": errs})
 			return
@@ -250,24 +250,32 @@ func (s *Server) handleGetUserByUsername() gin.HandlerFunc {
 
 		user, err := s.DB.FindUserByUsername(name.Username)
 		if err != nil {
+			if inactiveErr, ok := err.(servererrors.InActiveUserError); ok {
+				c.JSON(http.StatusBadRequest, gin.H{"error": inactiveErr.Error()})
+				c.Abort()
+				return
+			}
 			log.Printf("find user error : %v\n", err)
 			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 			return
 		}
-
-		if user.Status != "active" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "user not activated"})
-			return
-		}
+		// {
+		// message:
+		// 	data
+		// 	status
+		// 	errors
+		// }
 
 		c.JSON(http.StatusOK, gin.H{
-			"email":      user.Email,
-			"phone":      user.Phone,
-			"first_name": user.FirstName,
-			"last_name":  user.LastName,
-			"image":      user.Image,
-			"username":   user.Username,
-		})
+			"message": "user retrieved successfully",
+			"data": map[string]interface{}{
+				"email":      user.Email,
+				"phone":      user.Phone,
+				"first_name": user.FirstName,
+				"last_name":  user.LastName,
+				"image":      user.Image,
+				"username":   user.Username,
+			}})
 		return
 	}
 }
