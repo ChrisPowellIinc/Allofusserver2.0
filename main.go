@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"github.com/ChrisPowellIinc/Allofusserver2.0/db"
 	"github.com/ChrisPowellIinc/Allofusserver2.0/router"
@@ -10,8 +11,11 @@ import (
 )
 
 func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Fatalf("couldn't load env vars: %v", err)
+	env := os.Getenv("GIN_MODE")
+	if env != "release" {
+		if err := godotenv.Load(); err != nil {
+			log.Fatalf("couldn't load env vars: %v", err)
+		}
 	}
 
 	DB := &db.MongoDB{}
