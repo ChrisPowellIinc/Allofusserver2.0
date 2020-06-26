@@ -8,6 +8,7 @@ import (
 
 	"github.com/ChrisPowellIinc/Allofusserver2.0/db"
 	"github.com/ChrisPowellIinc/Allofusserver2.0/models"
+	"github.com/ChrisPowellIinc/Allofusserver2.0/server/errors"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 	validator "github.com/go-playground/validator/v10"
@@ -23,7 +24,7 @@ func (s *Server) handleSignup() gin.HandlerFunc {
 			verr, ok := err.(validator.ValidationErrors)
 			if ok {
 				for _, fieldErr := range verr {
-					errs = append(errs, fieldError{fieldErr}.String())
+					errs = append(errs, errors.NewFieldError(fieldErr).String())
 				}
 			} else {
 				errs = append(errs, "internal server error")
@@ -77,7 +78,7 @@ func (s *Server) handleLogin() gin.HandlerFunc {
 			errs := []string{}
 			if err, ok := err.(validator.ValidationErrors); ok {
 				for _, fieldErr := range err {
-					errs = append(errs, fieldError{fieldErr}.String())
+					errs = append(errs, errors.NewFieldError(fieldErr).String())
 				}
 				c.JSON(http.StatusBadRequest, gin.H{"errors": errs})
 			} else {
@@ -192,7 +193,7 @@ func (s *Server) handleUpdateUserDetails() gin.HandlerFunc {
 				if err := c.ShouldBindJSON(user); err != nil {
 					errs := []string{}
 					for _, fieldErr := range err.(validator.ValidationErrors) {
-						errs = append(errs, fieldError{fieldErr}.String())
+						errs = append(errs, errors.NewFieldError(fieldErr).String())
 					}
 					c.JSON(http.StatusBadRequest, gin.H{"errors": errs})
 					return
@@ -241,7 +242,7 @@ func (s *Server) handleGetUserByUsername() gin.HandlerFunc {
 		if err := c.ShouldBindJSON(name); err != nil {
 			errs := []string{}
 			for _, fieldErr := range err.(validator.ValidationErrors) {
-				errs = append(errs, fieldError{fieldErr}.String())
+				errs = append(errs, errors.NewFieldError(fieldErr).String())
 			}
 			c.JSON(http.StatusBadRequest, gin.H{"errors": errs})
 			return

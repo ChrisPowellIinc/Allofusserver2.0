@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/ChrisPowellIinc/Allofusserver2.0/models"
+	"github.com/ChrisPowellIinc/Allofusserver2.0/server/errors"
 	"github.com/ChrisPowellIinc/Allofusserver2.0/services"
 	"github.com/gin-gonic/gin"
 )
@@ -23,6 +24,11 @@ func Authorize(findUserByEmail func(string) (*models.User, error)) gin.HandlerFu
 		user := &models.User{}
 		if email, ok := claims["user_email"].(string); ok {
 			if user, err = findUserByEmail(email); err != nil {
+				if inactiveErr, ok := err.(errors.InActiveUserError); ok {
+					c.JSON(http.StatusBadRequest, gin.H{"error": inactiveErr.Error()})
+					c.Abort()
+					return
+				}
 				log.Printf("find user by email error: %v\n", err)
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 				c.Abort()
@@ -31,12 +37,6 @@ func Authorize(findUserByEmail func(string) (*models.User, error)) gin.HandlerFu
 		} else {
 			log.Printf("user email is not string\n")
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
-			c.Abort()
-			return
-		}
-
-		if user.Status != "active" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "user not activated"})
 			c.Abort()
 			return
 		}
