@@ -29,7 +29,8 @@ func (s *Server) handleSignup() gin.HandlerFunc {
 			} else {
 				errs = append(errs, "internal server error")
 			}
-			c.JSON(http.StatusBadRequest, gin.H{"errors": errs})
+			s.respond(c, "", http.StatusBadRequest, nil, errs)
+			// c.JSON(http.StatusBadRequest, gin.H{"errors": errs})
 			return
 		}
 		var err error
