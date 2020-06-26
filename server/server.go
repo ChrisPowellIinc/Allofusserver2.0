@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -16,7 +15,6 @@ import (
 	"github.com/ChrisPowellIinc/Allofusserver2.0/router"
 	"github.com/ChrisPowellIinc/Allofusserver2.0/server/middleware"
 	"github.com/gin-gonic/gin"
-	"github.com/go-playground/validator"
 )
 
 type Server struct {
@@ -38,35 +36,14 @@ func (s *Server) decode(w http.ResponseWriter, r *http.Request, v interface{}) e
 
 func (s *Server) defineRoutes(router *gin.Engine) {
 	apirouter := router.Group("/api/v1")
-	apirouter.Use(middleware.Authorize(s.DB.FindUserByEmail))
 	apirouter.POST("/auth/signup", s.handleSignup())
 	apirouter.POST("/auth/login", s.handleLogin())
 
-	authorized := router.Group("/")
-	authorized.GET("/home") // testing the authorized route
-}
-
-// fieldErrors
-type fieldError struct {
-	err validator.FieldError
-}
-
-func (q fieldError) String() string {
-	var sb strings.Builder
-
-	sb.WriteString("validation failed on field '" + q.err.Field() + "'")
-	sb.WriteString(", condition: " + q.err.ActualTag())
-
-	// Print condition parameters, e.g. oneof=red blue -> { red blue }
-	if q.err.Param() != "" {
-		sb.WriteString(" { " + q.err.Param() + " }")
-	}
-
-	if q.err.Value() != nil && q.err.Value() != "" {
-		sb.WriteString(fmt.Sprintf(", actual: %v", q.err.Value()))
-	}
-
-	return sb.String()
+	authorized := apirouter.Group("/")
+	authorized.Use(middleware.Authorize(s.DB.FindUserByEmail))
+	authorized.GET("/users", s.handleGetUsers())
+	authorized.PUT("/users", s.handleUpdateUserDetails())
+	authorized.GET("/me", s.handleShowProfile())
 }
 
 func (s *Server) setupRouter() *gin.Engine {
@@ -76,7 +53,7 @@ func (s *Server) setupRouter() *gin.Engine {
 		s.defineRoutes(r)
 		return r
 	}
-	r := gin.Default()
+	r := gin.New()
 	// LoggerWithFormatter middleware will write the logs to gin.DefaultWriter
 	// By default gin.DefaultWriter = os.Stdout
 	r.Use(gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
@@ -93,6 +70,7 @@ func (s *Server) setupRouter() *gin.Engine {
 			param.ErrorMessage,
 		)
 	}))
+	r.Use(gin.Recovery())
 	s.defineRoutes(r)
 	return r
 }
