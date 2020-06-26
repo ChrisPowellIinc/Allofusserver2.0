@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -20,18 +19,6 @@ import (
 type Server struct {
 	DB     db.DB
 	Router *router.Router
-}
-
-func (s *Server) respond(w http.ResponseWriter, r *http.Request, data interface{}, status int) {
-	w.WriteHeader(status)
-	if data != nil {
-		_ = json.NewEncoder(w).Encode(data)
-		// TODO: handle err
-	}
-}
-
-func (s *Server) decode(w http.ResponseWriter, r *http.Request, v interface{}) error {
-	return json.NewDecoder(r.Body).Decode(v)
 }
 
 func (s *Server) defineRoutes(router *gin.Engine) {
