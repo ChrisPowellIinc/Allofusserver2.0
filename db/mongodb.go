@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ChrisPowellIinc/Allofusserver2.0/models"
+	srverrors "github.com/ChrisPowellIinc/Allofusserver2.0/server/errors"
 	"github.com/globalsign/mgo"
 	"github.com/globalsign/mgo/bson"
 	"github.com/pkg/errors"
@@ -65,7 +66,7 @@ func (mdb *MongoDB) FindUserByEmail(email string) (*models.User, error) {
 	user := &models.User{}
 	err := mdb.DB.C("user").Find(bson.M{"email": email}).One(user)
 	if user.Status != "active" {
-		return &models.User{}, errors.New("user not activated")
+		return &models.User{}, srverrors.NewInActiveUserError("user is inactive")
 	}
 	return user, err
 }
