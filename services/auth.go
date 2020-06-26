@@ -10,7 +10,7 @@ import (
 // GetTokenFromHeader returns the token string in the authorization header
 func GetTokenFromHeader(c *gin.Context) string {
 	authHeader := c.Request.Header.Get("Authorization")
-	if authHeader != "" && len(authHeader) > 8 { //TODO good?
+	if authHeader != "" && len(authHeader) > 8 {
 		return authHeader[7:]
 	}
 	return ""
