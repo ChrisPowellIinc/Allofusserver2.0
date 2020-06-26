@@ -55,13 +55,13 @@ func (mdb *MongoDB) CreateUser(user *models.User) (*models.User, error) {
 
 // FindUserByUsername finds a user by the username
 func (mdb *MongoDB) FindUserByUsername(username string) (*models.User, error) {
-	var user *models.User
+	user := &models.User{}
 	err := mdb.DB.C("user").Find(bson.M{"username": username}).One(user)
 	return user, err
 }
 
-// FindUserByEmail finds a user by the email
-func (mdb MongoDB) FindUserByEmail(email string) (*models.User, error) {
+// FindUserByEmail finds a user by email
+func (mdb *MongoDB) FindUserByEmail(email string) (*models.User, error) {
 	user := &models.User{}
 	err := mdb.DB.C("user").Find(bson.M{"email": email}).One(user)
 	if user.Status != "active" {
@@ -78,11 +78,18 @@ func (mdb MongoDB) FindUserByPhone(phone string) (*models.User, error) {
 }
 
 // UpdateUser updates the src document to dest in the user collection
-func (mdb *MongoDB) UpdateUser(src *models.User, dest *models.User) error {
-	return mdb.DB.C("user").Update(src, dest)
+func (mdb *MongoDB) UpdateUser(user *models.User) error {
+	return mdb.DB.C("user").Update(bson.M{"email": user.Email}, user)
 }
 
 // AddToBlackList puts blacklist into the blacklist collection
 func (mdb *MongoDB) AddToBlackList(blacklist *models.Blacklist) error {
 	return mdb.DB.C("blacklist").Insert(blacklist)
+}
+
+// FindAllUsersExcept returns all the users expcept the one specified in the except parameter
+func (mdb *MongoDB) FindAllUsersExcept(except string) ([]models.User, error) {
+	var users []models.User
+	err := mdb.DB.C("user").Find(bson.M{"email": bson.M{"$ne": except}}).All(&users)
+	return users, err
 }
