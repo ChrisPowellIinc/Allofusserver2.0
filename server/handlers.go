@@ -147,6 +147,7 @@ func (s *Server) handleLogout() gin.HandlerFunc {
 
 						err := s.DB.AddToBlackList(blacklist)
 						if err != nil {
+							log.Printf("can't add token to blacklist: %v\n", err)
 							c.JSON(http.StatusInternalServerError, gin.H{"error": "logout failed"})
 							return
 						}
