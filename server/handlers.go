@@ -90,6 +90,10 @@ func (s *Server) handleLogin() gin.HandlerFunc {
 		// Check if the user with that username exists
 		user, err := s.DB.FindUserByUsername(loginRequest.Username)
 		if err != nil {
+			if inactiveErr, ok := err.(servererrors.InActiveUserError); ok {
+				c.JSON(http.StatusBadRequest, gin.H{"errors": []string{inactiveErr.Error()}})
+				return
+			}
 			log.Printf("No user: %v\n", err)
 			c.JSON(http.StatusUnauthorized, gin.H{"errors": []string{"username or password incorrect"}})
 			return
@@ -97,7 +101,7 @@ func (s *Server) handleLogin() gin.HandlerFunc {
 		//TODO why do you []byte user.Password?...its already a []byte
 		err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(loginRequest.Password))
 		if err != nil {
-			log.Printf("Passwords do not match %v\n", err)
+			log.Printf("passwords do not match %v\n", err)
 			c.JSON(http.StatusUnauthorized, gin.H{"errors": []string{"username or password incorrect"}})
 			return
 		}
@@ -253,7 +257,6 @@ func (s *Server) handleGetUserByUsername() gin.HandlerFunc {
 		if err != nil {
 			if inactiveErr, ok := err.(servererrors.InActiveUserError); ok {
 				c.JSON(http.StatusBadRequest, gin.H{"error": inactiveErr.Error()})
-				c.Abort()
 				return
 			}
 			log.Printf("find user error : %v\n", err)
