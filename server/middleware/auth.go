@@ -13,27 +13,31 @@ import (
 // Authorize authorizes a request
 func Authorize(findUserByEmail func(string) (*models.User, error)) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		claims, token, err := services.AuthorizeGetClaimsAndToken(c, os.Getenv("JWTSecret"))
+		claims, token, err := services.AuthorizeGetClaimsAndToken(c, os.Getenv("JWT_SECRET"))
 		if err != nil {
-			log.Printf("%v\n", err)
+			log.Printf("authorize claims error: %v\n", err)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			c.Abort()
 			return
 		}
-
-		var user *models.User
+		user := &models.User{}
 		if email, ok := claims["user_email"].(string); ok {
 			if user, err = findUserByEmail(email); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err})
+				log.Printf("find user by email error: %v\n", err)
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+				c.Abort()
 				return
 			}
 		} else {
 			log.Printf("user email is not string\n")
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+			c.Abort()
 			return
 		}
 
 		if user.Status != "active" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "user not activated"})
+			c.Abort()
 			return
 		}
 
