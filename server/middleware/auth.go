@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/ChrisPowellIinc/Allofusserver2.0/models"
-	"github.com/ChrisPowellIinc/Allofusserver2.0/server/errors"
+	"github.com/ChrisPowellIinc/Allofusserver2.0/servererrors"
 	"github.com/ChrisPowellIinc/Allofusserver2.0/services"
 	"github.com/gin-gonic/gin"
 )
@@ -24,7 +24,7 @@ func Authorize(findUserByEmail func(string) (*models.User, error)) gin.HandlerFu
 		user := &models.User{}
 		if email, ok := claims["user_email"].(string); ok {
 			if user, err = findUserByEmail(email); err != nil {
-				if inactiveErr, ok := err.(errors.InActiveUserError); ok {
+				if inactiveErr, ok := err.(servererrors.InActiveUserError); ok {
 					c.JSON(http.StatusBadRequest, gin.H{"error": inactiveErr.Error()})
 					c.Abort()
 					return
@@ -45,7 +45,7 @@ func Authorize(findUserByEmail func(string) (*models.User, error)) gin.HandlerFu
 		// so that the actions can use the claims from jwt token or the user
 		c.Set("user", user)
 		c.Set("claims", claims) //TODO remove this?...we dont use it
-		c.Set("token", token)
+		c.Set("token", token.Raw)
 		// calling next handler
 		c.Next()
 	}
