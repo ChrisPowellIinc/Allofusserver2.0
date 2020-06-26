@@ -34,7 +34,7 @@ func TestSignupWithCorrectDetails(t *testing.T) {
 		Phone:          "08909876787",
 	}
 
-	m.EXPECT().CreateUser(gomock.Any()).Return(user, nil)
+	m.EXPECT().CreateUser(gomock.Any()).Return(&user, nil)
 
 	jsonuser, err := json.Marshal(user)
 	if err != nil {
@@ -42,7 +42,7 @@ func TestSignupWithCorrectDetails(t *testing.T) {
 		return
 	}
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/auth/signup", strings.NewReader(string(jsonuser)))
+	req, _ := http.NewRequest("POST", "/api/v1/auth/signup", strings.NewReader(string(jsonuser)))
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusCreated, w.Code)
@@ -74,7 +74,7 @@ func TestSignupWithInCorrectDetails(t *testing.T) {
 		return
 	}
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/auth/signup", strings.NewReader(string(jsonuser)))
+	req, _ := http.NewRequest("POST", "/api/v1/auth/signup", strings.NewReader(string(jsonuser)))
 	router.ServeHTTP(w, req)
 
 	bodyString := w.Body.String()
