@@ -77,7 +77,7 @@ func (mdb MongoDB) FindUserByPhone(phone string) (*models.User, error) {
 	return user, err
 }
 
-// UpdateUser updates the src document to dest in the user collection
+// UpdateUser updates user in the collection
 func (mdb *MongoDB) UpdateUser(user *models.User) error {
 	return mdb.DB.C("user").Update(bson.M{"email": user.Email}, user)
 }
