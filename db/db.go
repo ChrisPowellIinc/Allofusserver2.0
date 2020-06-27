@@ -17,7 +17,7 @@ type DB interface {
 }
 
 // ValidationError defines error that occur due to validation
-type ValidationError struct {
+type ValidationError struct { //TODO why do we have this guy?
 	Field   string `json:"field"`
 	Message string `json:"message"`
 }
