@@ -69,7 +69,7 @@ func (s *Server) handleLogin() gin.HandlerFunc {
 			s.respond(c, "", http.StatusUnauthorized, nil, []string{err.Error()})
 			return
 		}
-		log.Printf("%v\n%s\n", user.Password, string(user.Password))
+		log.Printf("%v\n%s\n", user.Password, string(user.Password)) //TODO can we take this line away
 		err = bcrypt.CompareHashAndPassword(user.Password, []byte(loginRequest.Password))
 		if err != nil {
 			log.Printf("passwords do not match %v\n", err)
@@ -110,6 +110,7 @@ func (s *Server) handleLogout() gin.HandlerFunc {
 			if userI, exists := c.Get("user"); exists {
 				if user, ok := userI.(*models.User); ok {
 					if token, ok := tokenI.(string); ok {
+
 						blacklist := &models.Blacklist{}
 						blacklist.Email = user.Email
 						blacklist.CreatedAt = time.Now()
@@ -138,7 +139,7 @@ func (s *Server) handleShowProfile() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if userI, exists := c.Get("user"); exists {
 			if user, ok := userI.(*models.User); ok {
-				s.respond(c, "", http.StatusOK, gin.H{
+				s.respond(c, "user details retrieved correctly", http.StatusOK, gin.H{
 					"email":      user.Email,
 					"phone":      user.Phone,
 					"first_name": user.FirstName,
