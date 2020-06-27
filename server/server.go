@@ -30,8 +30,9 @@ func (s *Server) defineRoutes(router *gin.Engine) {
 
 	authorized := apirouter.Group("/")
 	authorized.Use(middleware.Authorize(s.DB.FindUserByEmail))
+	authorized.POST("/logout", s.handleLogout())
 	authorized.GET("/users", s.handleGetUsers())
-	authorized.PUT("/users", s.handleUpdateUserDetails())
+	authorized.PUT("/me/update", s.handleUpdateUserDetails())
 	authorized.GET("/me", s.handleShowProfile())
 }
 
