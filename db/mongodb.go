@@ -50,7 +50,7 @@ func (mdb *MongoDB) CreateUser(user *models.User) (*models.User, error) {
 		return user, ValidationError{Field: "phone", Message: "already in use"}
 	}
 	user.CreatedAt = time.Now()
-	err = mdb.DB.C("user").Insert(&user)
+	err = mdb.DB.C("user").Insert(user)
 	return user, err
 }
 
