@@ -11,7 +11,6 @@ import (
 	"github.com/ChrisPowellIinc/Allofusserver2.0/servererrors"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
-	validator "github.com/go-playground/validator/v10"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -19,28 +18,17 @@ func (s *Server) handleSignup() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		user := &models.User{Status: "active"}
 
-		if err := c.ShouldBindJSON(user); err != nil {
-			errs := []string{}
-			verr, ok := err.(validator.ValidationErrors)
-			if ok {
-				for _, fieldErr := range verr {
-					errs = append(errs, servererrors.NewFieldError(fieldErr).String())
-				}
-			} else {
-				errs = append(errs, "internal server error")
-			}
+		if errs := s.decode(c, user); errs != nil {
 			s.respond(c, "", http.StatusBadRequest, nil, errs)
-			// c.JSON(http.StatusBadRequest, gin.H{"errors": errs})
 			return
 		}
 		var err error
 		user.Password, err = bcrypt.GenerateFromPassword([]byte(user.PasswordString), bcrypt.DefaultCost)
 		if err != nil {
+			//TODO i feel like sending back the error as is, isn't safe/neccessary
+			//we can just log the original error and send back a custom error message
 			log.Printf("hash password err: %v\n", err)
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"message": "Sorry a problem occured, please try again",
-				"status":  http.StatusInternalServerError,
-			})
+			s.respond(c, "", http.StatusInternalServerError, nil, []string{err.Error()})
 			return
 		}
 		user, err = s.DB.CreateUser(user)
@@ -48,61 +36,44 @@ func (s *Server) handleSignup() gin.HandlerFunc {
 			log.Printf("create user err: %v\n", err)
 			err, ok := err.(db.ValidationError)
 			if ok {
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"errors": []string{err.Error()},
-					"Status": http.StatusBadRequest,
-				})
+				s.respond(c, "", http.StatusInternalServerError, nil, []string{err.Error()})
 				return
 			}
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"message": "Sorry a problem occured, please try again",
-				"Status":  http.StatusInternalServerError,
-			})
+			s.respond(c, "", http.StatusInternalServerError, nil, []string{err.Error()})
 			return
 		}
-
-		c.JSON(http.StatusCreated, gin.H{
-			"message": "signup successful",
-		})
+		s.respond(c, "signup successful", http.StatusCreated, nil, nil)
 	}
 }
 
 func (s *Server) handleLogin() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		user := &models.User{}
-		type Login struct {
+		loginRequest := &struct {
 			Username string `json:"username" binding:"required"`
 			Password string `json:"password" binding:"required"`
-		}
-		var loginRequest Login
-		if err := c.ShouldBindJSON(&loginRequest); err != nil {
-			errs := []string{}
-			if err, ok := err.(validator.ValidationErrors); ok {
-				for _, fieldErr := range err {
-					errs = append(errs, servererrors.NewFieldError(fieldErr).String())
-				}
-				c.JSON(http.StatusBadRequest, gin.H{"errors": errs})
-			} else {
-				c.JSON(http.StatusUnauthorized, gin.H{"errors": []string{"username or password incorrect"}})
-			}
+		}{}
+
+		if errs := s.decode(c, loginRequest); errs != nil {
+			s.respond(c, "", http.StatusBadRequest, nil, errs)
 			return
 		}
 		// Check if the user with that username exists
 		user, err := s.DB.FindUserByUsername(loginRequest.Username)
 		if err != nil {
 			if inactiveErr, ok := err.(servererrors.InActiveUserError); ok {
-				c.JSON(http.StatusBadRequest, gin.H{"errors": []string{inactiveErr.Error()}})
+				s.respond(c, "", http.StatusBadRequest, nil, []string{inactiveErr.Error()})
 				return
 			}
 			log.Printf("No user: %v\n", err)
-			c.JSON(http.StatusUnauthorized, gin.H{"errors": []string{"username or password incorrect"}})
+			s.respond(c, "", http.StatusUnauthorized, nil, []string{err.Error()})
 			return
 		}
 		log.Printf("%v\n%s\n", user.Password, string(user.Password))
 		err = bcrypt.CompareHashAndPassword(user.Password, []byte(loginRequest.Password))
 		if err != nil {
 			log.Printf("passwords do not match %v\n", err)
-			c.JSON(http.StatusUnauthorized, gin.H{"errors": []string{"username or password incorrect"}})
+			s.respond(c, "", http.StatusUnauthorized, nil, []string{err.Error()})
 			return
 		}
 
@@ -115,7 +86,7 @@ func (s *Server) handleLogin() gin.HandlerFunc {
 
 		if err != nil {
 			log.Printf("token signing err %v\n", err)
-			c.JSON(http.StatusUnauthorized, gin.H{"errors": []string{"username or password incorrect"}})
+			s.respond(c, "", http.StatusUnauthorized, nil, []string{err.Error()})
 			return
 		}
 
@@ -128,14 +99,7 @@ func (s *Server) handleLogin() gin.HandlerFunc {
 		// 	"username":   user.Username,
 		// 	"image":      user.Image,
 		// },
-
-		c.JSON(http.StatusOK, gin.H{
-			"message": "login successful",
-			"data": map[string]interface{}{
-				"user":  user,
-				"token": tokenString,
-			},
-		})
+		s.respond(c, "login successful", http.StatusOK, gin.H{"user": user, "token": tokenString}, nil)
 	}
 }
 
@@ -154,17 +118,17 @@ func (s *Server) handleLogout() gin.HandlerFunc {
 						err := s.DB.AddToBlackList(blacklist)
 						if err != nil {
 							log.Printf("can't add token to blacklist: %v\n", err)
-							c.JSON(http.StatusInternalServerError, gin.H{"error": "logout failed"})
+							s.respond(c, "logout failed", http.StatusInternalServerError, nil, []string{err.Error()})
 							return
 						}
-						c.JSON(http.StatusOK, gin.H{"message": "logout sucessful"})
+						s.respond(c, "logout successful", http.StatusOK, nil, nil)
 						return
 					}
 				}
 			}
 		}
 		log.Printf("can't get info from context\n")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		s.respond(c, "", http.StatusInternalServerError, nil, []string{"internal server error"})
 		return
 	}
 }
@@ -174,19 +138,19 @@ func (s *Server) handleShowProfile() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if userI, exists := c.Get("user"); exists {
 			if user, ok := userI.(*models.User); ok {
-				c.JSON(http.StatusOK, gin.H{
+				s.respond(c, "", http.StatusOK, gin.H{
 					"email":      user.Email,
 					"phone":      user.Phone,
 					"first_name": user.FirstName,
 					"last_name":  user.LastName,
 					"image":      user.Image,
 					"username":   user.Username,
-				})
+				}, nil)
 				return
 			}
 		}
 		log.Printf("can't get user from context\n")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		s.respond(c, "", http.StatusInternalServerError, nil, []string{"internal server error"})
 	}
 }
 
@@ -194,29 +158,28 @@ func (s *Server) handleUpdateUserDetails() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if userI, exists := c.Get("user"); exists {
 			if user, ok := userI.(*models.User); ok {
+
 				username, email := user.Username, user.Email
-				if err := c.ShouldBindJSON(user); err != nil {
-					errs := []string{}
-					for _, fieldErr := range err.(validator.ValidationErrors) {
-						errs = append(errs, servererrors.NewFieldError(fieldErr).String())
-					}
-					c.JSON(http.StatusBadRequest, gin.H{"errors": errs})
+				if errs := s.decode(c, user); errs != nil {
+					s.respond(c, "", http.StatusBadRequest, nil, errs)
 					return
 				}
+
+				//TODO try to eliminate this
 				user.Username, user.Email = username, email
 				user.UpdatedAt = time.Now()
 				if err := s.DB.UpdateUser(user); err != nil {
 					log.Printf("update user error : %v\n", err)
-					c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+					s.respond(c, "", http.StatusInternalServerError, nil, []string{err.Error()})
 					return
 				}
-				c.JSON(http.StatusOK, gin.H{"message": "user updated successfuly"})
+				s.respond(c, "user updated successfuly", http.StatusOK, nil, nil)
 				return
 			}
 		}
 
 		log.Printf("can't get user from context\n")
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		s.respond(c, "", http.StatusInternalServerError, nil, []string{"internal server error"})
 	}
 }
 
@@ -227,14 +190,14 @@ func (s *Server) handleGetUsers() gin.HandlerFunc {
 				users, err := s.DB.FindAllUsersExcept(user.Email)
 				if err != nil {
 					log.Printf("find users error : %v\n", err)
-					c.JSON(http.StatusInternalServerError, gin.H{"error": "could not find users"})
+					s.respond(c, "", http.StatusInternalServerError, nil, []string{"could not find users"})
 					return
 				}
-				c.JSON(http.StatusOK, gin.H{"data": users, "message": "retrieved users sucessfully"})
+				s.respond(c, "retrieved users sucessfully", http.StatusOK, gin.H{"users": users}, nil)
 				return
 			}
 		}
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		s.respond(c, "", http.StatusUnauthorized, nil, []string{"unauthorized"})
 		return
 	}
 }
@@ -244,43 +207,31 @@ func (s *Server) handleGetUserByUsername() gin.HandlerFunc {
 		name := &struct {
 			Username string `json:"username,omitempty" binding:"required"`
 		}{}
-		if err := c.ShouldBindJSON(name); err != nil {
-			errs := []string{}
-			for _, fieldErr := range err.(validator.ValidationErrors) {
-				errs = append(errs, servererrors.NewFieldError(fieldErr).String())
-			}
-			c.JSON(http.StatusBadRequest, gin.H{"errors": errs})
+
+		if errs := s.decode(c, name); errs != nil {
+			s.respond(c, "", http.StatusBadRequest, nil, errs)
 			return
 		}
 
 		user, err := s.DB.FindUserByUsername(name.Username)
 		if err != nil {
 			if inactiveErr, ok := err.(servererrors.InActiveUserError); ok {
-				c.JSON(http.StatusBadRequest, gin.H{"error": inactiveErr.Error()})
+				s.respond(c, "", http.StatusBadRequest, nil, []string{inactiveErr.Error()})
 				return
 			}
 			log.Printf("find user error : %v\n", err)
-			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			s.respond(c, "user not found", http.StatusNotFound, nil, []string{err.Error()})
 			return
 		}
-		// {
-		// message:
-		// 	data
-		// 	status
-		// 	errors
-		// }
 
-		c.JSON(http.StatusOK, gin.H{
-			"message": "user retrieved successfully",
-			"data": map[string]interface{}{
-				"email":      user.Email,
-				"phone":      user.Phone,
-				"first_name": user.FirstName,
-				"last_name":  user.LastName,
-				"image":      user.Image,
-				"username":   user.Username,
-			}})
-		return
+		s.respond(c, "user retrieved successfully", http.StatusOK, gin.H{
+			"email":      user.Email,
+			"phone":      user.Phone,
+			"first_name": user.FirstName,
+			"last_name":  user.LastName,
+			"image":      user.Image,
+			"username":   user.Username,
+		}, nil)
 	}
 }
 
