@@ -28,7 +28,7 @@ func (s *Server) handleSignup() gin.HandlerFunc {
 			//TODO i feel like sending back the error as is, isn't safe/neccessary
 			//we can just log the original error and send back a custom error message
 			log.Printf("hash password err: %v\n", err)
-			s.respond(c, "", http.StatusInternalServerError, nil, []string{err.Error()})
+			s.respond(c, "", http.StatusInternalServerError, nil, []string{"internal server error"})
 			return
 		}
 		user, err = s.DB.CreateUser(user)
@@ -36,10 +36,10 @@ func (s *Server) handleSignup() gin.HandlerFunc {
 			log.Printf("create user err: %v\n", err)
 			err, ok := err.(db.ValidationError)
 			if ok {
-				s.respond(c, "", http.StatusInternalServerError, nil, []string{err.Error()})
+				s.respond(c, "", http.StatusBadRequest, nil, []string{err.Error()})
 				return
 			}
-			s.respond(c, "", http.StatusInternalServerError, nil, []string{err.Error()})
+			s.respond(c, "", http.StatusInternalServerError, nil, []string{"internal server error"})
 			return
 		}
 		s.respond(c, "signup successful", http.StatusCreated, nil, nil)
