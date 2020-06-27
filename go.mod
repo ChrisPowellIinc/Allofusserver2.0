@@ -5,6 +5,7 @@ go 1.14
 require (
 	github.com/cortesi/modd v0.0.0-20200427000656-b4c550997d80 // indirect
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
+	github.com/gin-contrib/cors v1.3.1 // indirect
 	github.com/gin-gonic/gin v1.6.3
 	github.com/globalsign/mgo v0.0.0-20181015135952-eeefdecb41b8
 	github.com/go-playground/validator/v10 v10.2.0

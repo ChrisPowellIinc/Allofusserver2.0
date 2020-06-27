@@ -13,6 +13,7 @@ import (
 	"github.com/ChrisPowellIinc/Allofusserver2.0/db"
 	"github.com/ChrisPowellIinc/Allofusserver2.0/router"
 	"github.com/ChrisPowellIinc/Allofusserver2.0/server/middleware"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
@@ -58,6 +59,18 @@ func (s *Server) setupRouter() *gin.Engine {
 		)
 	}))
 	r.Use(gin.Recovery())
+	// setup cors
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"*"},
+		AllowMethods:     []string{"POST", "GET", "PUT", "PATCH"},
+		AllowHeaders:     []string{"*"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		// AllowOriginFunc: func(origin string) bool {
+		// 	return origin == "https://github.com"
+		// },
+		MaxAge: 12 * time.Hour,
+	}))
 	s.defineRoutes(r)
 	return r
 }
