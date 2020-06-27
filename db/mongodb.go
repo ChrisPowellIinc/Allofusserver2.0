@@ -77,7 +77,7 @@ func (mdb *MongoDB) FindUserByEmail(email string) (*models.User, error) {
 // FindUserByPhone finds a user by the phone
 func (mdb MongoDB) FindUserByPhone(phone string) (*models.User, error) {
 	user := &models.User{}
-	err := mdb.DB.C("user").Find(bson.M{"phone": phone}).One(&user)
+	err := mdb.DB.C("user").Find(bson.M{"phone": phone}).One(user)
 	return user, err
 }
 
@@ -88,7 +88,18 @@ func (mdb *MongoDB) UpdateUser(user *models.User) error {
 
 // AddToBlackList puts blacklist into the blacklist collection
 func (mdb *MongoDB) AddToBlackList(blacklist *models.Blacklist) error {
-	return mdb.DB.C("blacklist").Insert(blacklist)
+	if !mdb.TokenInBlacklist(blacklist) {
+		return mdb.DB.C("blacklist").Insert(blacklist)
+	}
+	return errors.New("token already in blacklist")
+}
+
+// TokenInBlacklist checks if blacklist is already in the blacklist collection
+func (mdb *MongoDB) TokenInBlacklist(blacklist *models.Blacklist) bool {
+	if err := mdb.DB.C("blacklist").Find(bson.M{"token": blacklist.Token}).One(blacklist); err == nil {
+		return true
+	}
+	return false
 }
 
 // FindAllUsersExcept returns all the users expcept the one specified in the except parameter
