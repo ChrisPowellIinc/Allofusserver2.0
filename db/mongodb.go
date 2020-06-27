@@ -37,7 +37,6 @@ func (mdb *MongoDB) Init() {
 
 // CreateUser creates a new user in the DB
 func (mdb *MongoDB) CreateUser(user *models.User) (*models.User, error) {
-	user.CreatedAt = time.Now()
 	_, err := mdb.FindUserByEmail(user.Email)
 	if err == nil {
 		return user, ValidationError{Field: "email", Message: "already in use"}
@@ -50,6 +49,7 @@ func (mdb *MongoDB) CreateUser(user *models.User) (*models.User, error) {
 	if err == nil {
 		return user, ValidationError{Field: "phone", Message: "already in use"}
 	}
+	user.CreatedAt = time.Now()
 	err = mdb.DB.C("user").Insert(&user)
 	return user, err
 }
