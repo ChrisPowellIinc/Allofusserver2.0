@@ -17,6 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Server serves requests to DB with router
 type Server struct {
 	DB     db.DB
 	Router *router.Router
