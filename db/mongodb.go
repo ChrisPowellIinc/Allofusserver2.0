@@ -94,7 +94,7 @@ func (mdb *MongoDB) AddToBlackList(blacklist *models.Blacklist) error {
 // TokenInBlacklist checks if token is already in the blacklist collection
 func (mdb *MongoDB) TokenInBlacklist(token *string) bool {
 	blacklist := &struct {
-		Token string
+		Token string //we could remove this though....
 	}{} //Did this so as to allow middleware Authorize use this
 	if err := mdb.DB.C("blacklist").Find(bson.M{"token": *token}).One(blacklist); err != nil {
 		return false
