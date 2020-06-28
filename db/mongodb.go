@@ -88,15 +88,18 @@ func (mdb *MongoDB) UpdateUser(user *models.User) error {
 
 // AddToBlackList puts blacklist into the blacklist collection
 func (mdb *MongoDB) AddToBlackList(blacklist *models.Blacklist) error {
-	if !mdb.TokenInBlacklist(blacklist) {
+	if !mdb.TokenInBlacklist(&blacklist.Token) {
 		return mdb.DB.C("blacklist").Insert(blacklist)
 	}
 	return errors.New("token already in blacklist")
 }
 
 // TokenInBlacklist checks if blacklist is already in the blacklist collection
-func (mdb *MongoDB) TokenInBlacklist(blacklist *models.Blacklist) bool {
-	if err := mdb.DB.C("blacklist").Find(bson.M{"token": blacklist.Token}).One(blacklist); err == nil {
+func (mdb *MongoDB) TokenInBlacklist(token *string) bool {
+	blacklist := &struct {
+		Token string
+	}{} //Did this so as to allow middleware Authorize use this
+	if err := mdb.DB.C("blacklist").Find(bson.M{"token": *token}).One(blacklist); err == nil {
 		return true
 	}
 	return false
