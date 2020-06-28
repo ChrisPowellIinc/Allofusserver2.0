@@ -99,10 +99,10 @@ func (mdb *MongoDB) TokenInBlacklist(token *string) bool {
 	blacklist := &struct {
 		Token string
 	}{} //Did this so as to allow middleware Authorize use this
-	if err := mdb.DB.C("blacklist").Find(bson.M{"token": *token}).One(blacklist); err == nil {
-		return true
+	if err := mdb.DB.C("blacklist").Find(bson.M{"token": *token}).One(blacklist); err != nil {
+		return false
 	}
-	return false
+	return true
 }
 
 // FindAllUsersExcept returns all the users expcept the one specified in the except parameter
