@@ -48,10 +48,8 @@ func Authorize(findUserByEmail func(string) (*models.User, error), tokenInBlackl
 			return
 		}
 
-		// set the claims and user as context parameters.
-		// so that the actions can use the claims from jwt token or the user
+		// set the user and token as context parameters.
 		c.Set("user", user)
-		c.Set("claims", claims) //TODO remove this?...we dont use it
 		c.Set("token", token.Raw)
 		// calling next handler
 		c.Next()
