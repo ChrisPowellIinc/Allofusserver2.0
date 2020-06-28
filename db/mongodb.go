@@ -88,10 +88,7 @@ func (mdb *MongoDB) UpdateUser(user *models.User) error {
 
 // AddToBlackList puts blacklist into the blacklist collection
 func (mdb *MongoDB) AddToBlackList(blacklist *models.Blacklist) error {
-	if !mdb.TokenInBlacklist(&blacklist.Token) {
-		return mdb.DB.C("blacklist").Insert(blacklist)
-	}
-	return errors.New("token already in blacklist")
+	return mdb.DB.C("blacklist").Insert(blacklist)
 }
 
 // TokenInBlacklist checks if token is already in the blacklist collection
