@@ -12,7 +12,7 @@ import (
 )
 
 // Authorize authorizes a request
-func Authorize(findUserByEmail func(string) (*models.User, error)) gin.HandlerFunc {
+func Authorize(findUserByEmail func(string) (*models.User, error), tokenInBlacklist func(*string) bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		claims, token, err := services.AuthorizeGetClaimsAndToken(c, os.Getenv("JWT_SECRET"))
 		if err != nil {
@@ -21,6 +21,13 @@ func Authorize(findUserByEmail func(string) (*models.User, error)) gin.HandlerFu
 			c.Abort()
 			return
 		}
+
+		if tokenInBlacklist(&token.Raw) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid token"})
+			c.Abort()
+			return
+		}
+
 		user := &models.User{}
 		if email, ok := claims["user_email"].(string); ok {
 			if user, err = findUserByEmail(email); err != nil {
