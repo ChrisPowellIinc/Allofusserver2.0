@@ -13,6 +13,7 @@ type DB interface {
 	FindUserByEmail(email string) (*models.User, error)
 	UpdateUser(user *models.User) error
 	AddToBlackList(blacklist *models.Blacklist) error
+	TokenInBlacklist(token *string) bool
 	FindAllUsersExcept(except string) ([]models.User, error)
 }
 
