@@ -34,8 +34,7 @@ func (s *Server) handleSignup() gin.HandlerFunc {
 		user, err = s.DB.CreateUser(user)
 		if err != nil {
 			log.Printf("create user err: %v\n", err)
-			err, ok := err.(db.ValidationError)
-			if ok {
+			if err, ok := err.(db.ValidationError); ok {
 				s.respond(c, "", http.StatusBadRequest, nil, []string{err.Error()})
 				return
 			}
@@ -66,14 +65,14 @@ func (s *Server) handleLogin() gin.HandlerFunc {
 				return
 			}
 			log.Printf("No user: %v\n", err)
-			s.respond(c, "", http.StatusUnauthorized, nil, []string{err.Error()})
+			s.respond(c, "", http.StatusUnauthorized, nil, []string{"user not found"})
 			return
 		}
 		log.Printf("%v\n%s\n", user.Password, string(user.Password)) //TODO can we take this line away
 		err = bcrypt.CompareHashAndPassword(user.Password, []byte(loginRequest.Password))
 		if err != nil {
 			log.Printf("passwords do not match %v\n", err)
-			s.respond(c, "", http.StatusUnauthorized, nil, []string{err.Error()})
+			s.respond(c, "", http.StatusUnauthorized, nil, []string{"username or password incorrect"})
 			return
 		}
 
@@ -86,10 +85,11 @@ func (s *Server) handleLogin() gin.HandlerFunc {
 
 		if err != nil {
 			log.Printf("token signing err %v\n", err)
-			s.respond(c, "", http.StatusUnauthorized, nil, []string{err.Error()})
+			s.respond(c, "", http.StatusInternalServerError, nil, []string{"internal server error"})
 			return
 		}
 
+		//TODO remove these comments?
 		// Data: map[string]interface{}{
 		// 	"token":      tokenString,
 		// 	"first_name": user.FirstName,
@@ -119,7 +119,7 @@ func (s *Server) handleLogout() gin.HandlerFunc {
 						err := s.DB.AddToBlackList(blacklist)
 						if err != nil {
 							log.Printf("can't add token to blacklist: %v\n", err)
-							s.respond(c, "logout failed", http.StatusInternalServerError, nil, []string{err.Error()})
+							s.respond(c, "logout failed", http.StatusInternalServerError, nil, []string{"couldn't revoke token"})
 							return
 						}
 						s.respond(c, "logout successful", http.StatusOK, nil, nil)
@@ -171,14 +171,13 @@ func (s *Server) handleUpdateUserDetails() gin.HandlerFunc {
 				user.UpdatedAt = time.Now()
 				if err := s.DB.UpdateUser(user); err != nil {
 					log.Printf("update user error : %v\n", err)
-					s.respond(c, "", http.StatusInternalServerError, nil, []string{err.Error()})
+					s.respond(c, "", http.StatusInternalServerError, nil, []string{"internal server error"})
 					return
 				}
 				s.respond(c, "user updated successfuly", http.StatusOK, nil, nil)
 				return
 			}
 		}
-
 		log.Printf("can't get user from context\n")
 		s.respond(c, "", http.StatusInternalServerError, nil, []string{"internal server error"})
 	}
@@ -191,14 +190,15 @@ func (s *Server) handleGetUsers() gin.HandlerFunc {
 				users, err := s.DB.FindAllUsersExcept(user.Email)
 				if err != nil {
 					log.Printf("find users error : %v\n", err)
-					s.respond(c, "", http.StatusInternalServerError, nil, []string{"could not find users"})
+					s.respond(c, "", http.StatusInternalServerError, nil, []string{"internal server error"})
 					return
 				}
 				s.respond(c, "retrieved users sucessfully", http.StatusOK, gin.H{"users": users}, nil)
 				return
 			}
 		}
-		s.respond(c, "", http.StatusUnauthorized, nil, []string{"unauthorized"})
+		log.Printf("can't get user from context\n")
+		s.respond(c, "", http.StatusInternalServerError, nil, []string{"internal server error"})
 		return
 	}
 }
@@ -206,7 +206,7 @@ func (s *Server) handleGetUsers() gin.HandlerFunc {
 func (s *Server) handleGetUserByUsername() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		name := &struct {
-			Username string `json:"username,omitempty" binding:"required"`
+			Username string `json:"username" binding:"required"`
 		}{}
 
 		if errs := s.decode(c, name); errs != nil {
@@ -221,7 +221,7 @@ func (s *Server) handleGetUserByUsername() gin.HandlerFunc {
 				return
 			}
 			log.Printf("find user error : %v\n", err)
-			s.respond(c, "user not found", http.StatusNotFound, nil, []string{err.Error()})
+			s.respond(c, "user not found", http.StatusNotFound, nil, []string{"user not found"})
 			return
 		}
 
