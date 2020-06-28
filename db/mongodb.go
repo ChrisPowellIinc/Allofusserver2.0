@@ -94,7 +94,7 @@ func (mdb *MongoDB) AddToBlackList(blacklist *models.Blacklist) error {
 	return errors.New("token already in blacklist")
 }
 
-// TokenInBlacklist checks if blacklist is already in the blacklist collection
+// TokenInBlacklist checks if token is already in the blacklist collection
 func (mdb *MongoDB) TokenInBlacklist(token *string) bool {
 	blacklist := &struct {
 		Token string
