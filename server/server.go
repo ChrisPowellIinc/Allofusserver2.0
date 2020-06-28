@@ -29,7 +29,7 @@ func (s *Server) defineRoutes(router *gin.Engine) {
 	apirouter.POST("/auth/login", s.handleLogin())
 
 	authorized := apirouter.Group("/")
-	authorized.Use(middleware.Authorize(s.DB.FindUserByEmail))
+	authorized.Use(middleware.Authorize(s.DB.FindUserByEmail, s.DB.TokenInBlacklist))
 	authorized.POST("/logout", s.handleLogout())
 	authorized.GET("/users", s.handleGetUsers())
 	authorized.PUT("/me/update", s.handleUpdateUserDetails())
