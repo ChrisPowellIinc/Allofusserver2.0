@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
@@ -38,5 +39,26 @@ func AuthorizeGetClaimsAndToken(c *gin.Context, secret string) (jwt.MapClaims, *
 		}
 		return claims, token, nil
 	}
-	return nil, nil, fmt.Errorf("token invalid")
+	return nil, nil, fmt.Errorf("empty token")
+}
+
+// GenerateAccessAndRefreshTokens generates new access and refresh tokens using
+// acc_claims as the claims for the access token and refresh_claims for the
+// refresh token
+func GenerateAccessAndRefreshTokens(signMethod *jwt.SigningMethodHMAC, accessClaims jwt.MapClaims, refreshClaims jwt.MapClaims) (*string, *string, error) {
+	secret := []byte(os.Getenv("JWT_SECRET"))
+	accToken := jwt.NewWithClaims(signMethod, accessClaims)
+
+	// Sign and get the complete encoded token as a string using the secret
+	accTokenString, err := accToken.SignedString(secret)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	refreshToken := jwt.NewWithClaims(signMethod, refreshClaims)
+	refreshTokenString, err := refreshToken.SignedString(secret)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &accTokenString, &refreshTokenString, nil
 }
