@@ -94,22 +94,16 @@ func (s *Server) handleLogin() gin.HandlerFunc {
 
 		s.respond(c, "login successful", http.StatusOK, gin.H{
 			"user":          user,
-			"access_token":  accToken,
-			"refresh_token": refreshToken,
+			"access_token":  *accToken,
+			"refresh_token": *refreshToken,
 		}, nil)
-	}
-}
-
-func (s *Server) handleRefreshToken() gin.HandlerFunc {
-	return func(c *gin.Context) {
-
 	}
 }
 
 func (s *Server) handleLogout() gin.HandlerFunc {
 	return func(c *gin.Context) {
 
-		if tokenI, exists := c.Get("token"); exists {
+		if tokenI, exists := c.Get("access_token"); exists {
 			if userI, exists := c.Get("user"); exists {
 				if user, ok := userI.(*models.User); ok {
 					if token, ok := tokenI.(string); ok {
