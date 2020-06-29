@@ -3,6 +3,7 @@ package server
 import (
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/ChrisPowellIinc/Allofusserver2.0/db"
@@ -85,9 +86,17 @@ func (s *Server) handleLogin() gin.HandlerFunc {
 			"sub": 1,
 		}
 
-		accToken, refreshToken, err := services.GenerateAccessAndRefreshTokens(jwt.SigningMethodHS256, accessClaims, refreshClaims)
+		secret := os.Getenv("JWT_SECRET")
+		accToken, err := services.GenerateToken(jwt.SigningMethodHS256, accessClaims, &secret)
 		if err != nil {
-			log.Printf("token generation error err %v\n", err)
+			log.Printf("token generation error err: %v\n", err)
+			s.respond(c, "", http.StatusInternalServerError, nil, []string{"internal server error"})
+			return
+		}
+
+		refreshToken, err := services.GenerateToken(jwt.SigningMethodHS256, refreshClaims, &secret)
+		if err != nil {
+			log.Printf("token generation error err: %v\n", err)
 			s.respond(c, "", http.StatusInternalServerError, nil, []string{"internal server error"})
 			return
 		}
