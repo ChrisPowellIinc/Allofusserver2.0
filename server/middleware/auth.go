@@ -17,7 +17,8 @@ import (
 func Authorize(findUserByEmail func(string) (*models.User, error), tokenInBlacklist func(*string) bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		secret := os.Getenv("JWT_SECRET")
-		accesstoken, accessClaims, err := services.AuthorizeAccessToken(c, &secret)
+		accToken := services.GetTokenFromHeader(c)
+		accesstoken, accessClaims, err := services.AuthorizeToken(&accToken, &secret)
 		if err != nil {
 			log.Printf("authorize access token error: %v\n", err)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
@@ -37,7 +38,7 @@ func Authorize(findUserByEmail func(string) (*models.User, error), tokenInBlackl
 				return
 			}
 
-			refreshToken, _, err := services.AuthorizeRefreshToken(&rt.RefreshToken, &secret)
+			refreshToken, rtClaims, err := services.AuthorizeToken(&rt.RefreshToken, &secret)
 			if err != nil {
 				log.Printf("authorize refresh token error: %v\n", err)
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh token is invalid"})
@@ -45,9 +46,16 @@ func Authorize(findUserByEmail func(string) (*models.User, error), tokenInBlackl
 				return
 			}
 
+			if sub, ok := rtClaims["sub"].(int); ok && sub != 1 {
+				log.Printf("invalid refresh token")
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh token is invalid"})
+				c.Abort()
+				return
+			}
+
 			if !isTokenExpired(refreshToken) {
 				accessClaims["exp"] = time.Now().Add(time.Minute * 20).Unix()
-				newAccessToken, err := services.GenerateAccessToken(accessClaims, &secret)
+				newAccessToken, err := services.GenerateToken(jwt.SigningMethodHS256, accessClaims, &secret)
 				if err != nil {
 					log.Printf("generate new access token error: %v\n", err)
 					c.JSON(http.StatusUnauthorized, gin.H{"error": "can't generate new access token"})
