@@ -10,7 +10,7 @@ import (
 // GetTokenFromHeader returns the token string in the authorization header
 func GetTokenFromHeader(c *gin.Context) string {
 	authHeader := c.Request.Header.Get("Authorization")
-	if authHeader != "" && len(authHeader) > 8 {
+	if len(authHeader) > 8 {
 		return authHeader[7:]
 	}
 	return ""
@@ -30,7 +30,7 @@ func verifyToken(tokenString *string, claims jwt.MapClaims, secret *string) (*jw
 
 // AuthorizeToken check if a refresh token is valid
 func AuthorizeToken(token *string, secret *string) (*jwt.Token, jwt.MapClaims, error) {
-	if token != nil || *token != "" {
+	if token != nil && *token != "" && secret != nil && *secret != "" {
 		claims := jwt.MapClaims{}
 		token, err := verifyToken(token, claims, secret)
 		if err != nil {
@@ -38,7 +38,7 @@ func AuthorizeToken(token *string, secret *string) (*jwt.Token, jwt.MapClaims, e
 		}
 		return token, claims, nil
 	}
-	return nil, nil, fmt.Errorf("empty token")
+	return nil, nil, fmt.Errorf("empty token or secret")
 }
 
 // GenerateToken generates only an access token
