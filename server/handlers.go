@@ -3,12 +3,12 @@ package server
 import (
 	"log"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/ChrisPowellIinc/Allofusserver2.0/db"
 	"github.com/ChrisPowellIinc/Allofusserver2.0/models"
 	"github.com/ChrisPowellIinc/Allofusserver2.0/servererrors"
+	"github.com/ChrisPowellIinc/Allofusserver2.0/services"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -76,30 +76,33 @@ func (s *Server) handleLogin() gin.HandlerFunc {
 			return
 		}
 
-		// Create a new token object, specifying signing method and the claims
-		// you would like it to contain.
-		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"user_email": user.Email})
+		accessClaims := jwt.MapClaims{
+			"user_email": user.Email,
+			"exp":        time.Now().Add(time.Minute * 20).Unix(),
+		}
+		refreshClaims := jwt.MapClaims{
+			"exp": time.Now().Add(time.Hour * 24).Unix(),
+			"sub": 1,
+		}
 
-		// Sign and get the complete encoded token as a string using the secret
-		tokenString, err := token.SignedString([]byte(os.Getenv("JWT_SECRET")))
-
+		accToken, refreshToken, err := services.GenerateAccessAndRefreshTokens(jwt.SigningMethodHS256, accessClaims, refreshClaims)
 		if err != nil {
-			log.Printf("token signing err %v\n", err)
+			log.Printf("token generation error err %v\n", err)
 			s.respond(c, "", http.StatusInternalServerError, nil, []string{"internal server error"})
 			return
 		}
 
-		//TODO remove these comments?
-		// Data: map[string]interface{}{
-		// 	"token":      tokenString,
-		// 	"first_name": user.FirstName,
-		// 	"last_name":  user.LastName,
-		// 	"phone":      user.Phone,
-		// 	"email":      user.Email,
-		// 	"username":   user.Username,
-		// 	"image":      user.Image,
-		// },
-		s.respond(c, "login successful", http.StatusOK, gin.H{"user": user, "token": tokenString}, nil)
+		s.respond(c, "login successful", http.StatusOK, gin.H{
+			"user":          user,
+			"access_token":  accToken,
+			"refresh_token": refreshToken,
+		}, nil)
+	}
+}
+
+func (s *Server) handleRefreshToken() gin.HandlerFunc {
+	return func(c *gin.Context) {
+
 	}
 }
 
