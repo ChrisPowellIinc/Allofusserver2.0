@@ -9,20 +9,13 @@ import (
 )
 
 func (s *Server) respond(c *gin.Context, message string, status int, data interface{}, errs []string) {
-	responsedata := gin.H{}
-	if message != "" {
-		responsedata["message"] = message
+	responsedata := gin.H{
+		"message": message,
+		"data":    data,
+		"errors":  errs,
+		"status":  http.StatusText(status),
 	}
 
-	if data != nil {
-		responsedata["data"] = data
-	}
-
-	if errs != nil {
-		responsedata["errors"] = errs
-	}
-
-	responsedata["status"] = http.StatusText(status)
 	c.JSON(status, responsedata)
 }
 
