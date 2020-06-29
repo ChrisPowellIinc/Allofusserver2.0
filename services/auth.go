@@ -19,25 +19,38 @@ func GetTokenFromHeader(c *gin.Context) string {
 
 //TODO more research on verifying tokens
 
-// VerifyToken verifies a token
-func VerifyToken(tokenString string, claims jwt.MapClaims, secret string) (*jwt.Token, error) {
-	return jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+// verifyAccessToken verifies a token
+func verifyToken(tokenString *string, claims jwt.MapClaims, secret *string) (*jwt.Token, error) {
+	return jwt.ParseWithClaims(*tokenString, claims, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
-		return []byte(secret), nil
+		return []byte(*secret), nil
 	})
 }
 
-// AuthorizeGetClaimsAndToken authorizes a context and returns the claims in its token
-func AuthorizeGetClaimsAndToken(c *gin.Context, secret string) (jwt.MapClaims, *jwt.Token, error) {
+// AuthorizeAccessToken authorizes a context and returns the claims in its token
+func AuthorizeAccessToken(c *gin.Context, secret *string) (*jwt.Token, jwt.MapClaims, error) {
 	if tokenString := GetTokenFromHeader(c); tokenString != "" {
 		claims := jwt.MapClaims{}
-		token, err := VerifyToken(tokenString, claims, secret)
+		token, err := verifyToken(&tokenString, claims, secret)
 		if err != nil {
 			return nil, nil, fmt.Errorf("error getting token: %v", err)
 		}
-		return claims, token, nil
+		return token, claims, nil
+	}
+	return nil, nil, fmt.Errorf("empty token")
+}
+
+// AuthorizeRefreshToken check if a refresh token is valid
+func AuthorizeRefreshToken(refreshToken *string, secret *string) (*jwt.Token, jwt.MapClaims, error) {
+	if refreshToken != nil || *refreshToken != "" {
+		claims := jwt.MapClaims{}
+		token, err := verifyToken(refreshToken, claims, secret)
+		if err != nil {
+			return nil, nil, err
+		}
+		return token, claims, nil
 	}
 	return nil, nil, fmt.Errorf("empty token")
 }
@@ -61,4 +74,17 @@ func GenerateAccessAndRefreshTokens(signMethod *jwt.SigningMethodHMAC, accessCla
 		return nil, nil, err
 	}
 	return &accTokenString, &refreshTokenString, nil
+}
+
+// GenerateAccessToken generates only an access token
+func GenerateAccessToken(claims jwt.MapClaims, secret *string) (*string, error) {
+	// Create a new token object, specifying signing method and the claims
+	// you would like it to contain.
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	// Sign and get the complete encoded token as a string using the secret
+	tokenString, err := token.SignedString([]byte(*secret))
+	if err != nil {
+		return nil, fmt.Errorf("")
+	}
+	return &tokenString, nil
 }
