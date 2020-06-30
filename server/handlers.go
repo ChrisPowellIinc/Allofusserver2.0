@@ -124,12 +124,6 @@ func (s *Server) handleLogout() gin.HandlerFunc {
 				if user, ok := userI.(*models.User); ok {
 					if accessToken, ok := tokenI.(string); ok {
 
-						accBlacklist := &models.Blacklist{
-							Email:     user.Email,
-							CreatedAt: time.Now(),
-							Token:     accessToken,
-						}
-
 						rt := &struct {
 							RefreshToken string `json:"refresh_token,omitempty" binding:"required"`
 						}{}
@@ -140,10 +134,10 @@ func (s *Server) handleLogout() gin.HandlerFunc {
 							return
 						}
 
-						refreshBlacklist := &models.Blacklist{
+						accBlacklist := &models.Blacklist{
 							Email:     user.Email,
 							CreatedAt: time.Now(),
-							Token:     rt.RefreshToken,
+							Token:     accessToken,
 						}
 
 						err := s.DB.AddToBlackList(accBlacklist)
@@ -151,6 +145,12 @@ func (s *Server) handleLogout() gin.HandlerFunc {
 							log.Printf("can't add access token to blacklist: %v\n", err)
 							response.JSON(c, "logout failed", http.StatusInternalServerError, nil, []string{"couldn't revoke access token"})
 							return
+						}
+
+						refreshBlacklist := &models.Blacklist{
+							Email:     user.Email,
+							CreatedAt: time.Now(),
+							Token:     rt.RefreshToken,
 						}
 
 						err = s.DB.AddToBlackList(refreshBlacklist)
