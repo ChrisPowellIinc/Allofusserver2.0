@@ -122,17 +122,41 @@ func (s *Server) handleLogout() gin.HandlerFunc {
 		if tokenI, exists := c.Get("access_token"); exists {
 			if userI, exists := c.Get("user"); exists {
 				if user, ok := userI.(*models.User); ok {
-					if token, ok := tokenI.(string); ok {
+					if accessToken, ok := tokenI.(string); ok {
 
-						blacklist := &models.Blacklist{}
-						blacklist.Email = user.Email
-						blacklist.CreatedAt = time.Now()
-						blacklist.Token = token
+						accBlacklist := &models.Blacklist{
+							Email:     user.Email,
+							CreatedAt: time.Now(),
+							Token:     accessToken,
+						}
 
-						err := s.DB.AddToBlackList(blacklist)
+						rt := &struct {
+							RefreshToken string `json:"refresh_token,omitempty" binding:"required"`
+						}{}
+
+						if err := c.ShouldBindJSON(rt); err != nil {
+							log.Printf("no refresh token in request body: %v\n", err)
+							response.JSON(c, "", http.StatusBadRequest, nil, []string{"unauthorized"})
+							return
+						}
+
+						refreshBlacklist := &models.Blacklist{
+							Email:     user.Email,
+							CreatedAt: time.Now(),
+							Token:     rt.RefreshToken,
+						}
+
+						err := s.DB.AddToBlackList(accBlacklist)
 						if err != nil {
-							log.Printf("can't add token to blacklist: %v\n", err)
-							response.JSON(c, "logout failed", http.StatusInternalServerError, nil, []string{"couldn't revoke token"})
+							log.Printf("can't add access token to blacklist: %v\n", err)
+							response.JSON(c, "logout failed", http.StatusInternalServerError, nil, []string{"couldn't revoke access token"})
+							return
+						}
+
+						err = s.DB.AddToBlackList(refreshBlacklist)
+						if err != nil {
+							log.Printf("can't add refresh token to blacklist: %v\n", err)
+							response.JSON(c, "logout failed", http.StatusInternalServerError, nil, []string{"couldn't revoke refresh token"})
 							return
 						}
 						response.JSON(c, "logout successful", http.StatusOK, nil, nil)
