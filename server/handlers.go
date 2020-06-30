@@ -15,12 +15,13 @@ import (
 	"github.com/ChrisPowellIinc/Allofusserver2.0/servererrors"
 	"github.com/ChrisPowellIinc/Allofusserver2.0/services"
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 	"github.com/globalsign/mgo/bson"
 	"golang.org/x/crypto/bcrypt"
-	"honnef.co/go/tools/config"
 )
 
 func (s *Server) handleSignup() gin.HandlerFunc {
@@ -34,8 +35,6 @@ func (s *Server) handleSignup() gin.HandlerFunc {
 		var err error
 		user.Password, err = bcrypt.GenerateFromPassword([]byte(user.PasswordString), bcrypt.DefaultCost)
 		if err != nil {
-			//TODO i feel like sending back the error as is, isn't safe/neccessary
-			//we can just log the original error and send back a custom error message
 			log.Printf("hash password err: %v\n", err)
 			response.JSON(c, "", http.StatusInternalServerError, nil, []string{"internal server error"})
 			return
@@ -77,7 +76,7 @@ func (s *Server) handleLogin() gin.HandlerFunc {
 			response.JSON(c, "", http.StatusUnauthorized, nil, []string{"user not found"})
 			return
 		}
-		log.Printf("%v\n%s\n", user.Password, string(user.Password)) //TODO can we take this line away
+		log.Printf("%v\n%s\n", user.Password, string(user.Password))
 		err = bcrypt.CompareHashAndPassword(user.Password, []byte(loginRequest.Password))
 		if err != nil {
 			log.Printf("passwords do not match %v\n", err)
@@ -254,70 +253,79 @@ func (s *Server) handleGetUserByUsername() gin.HandlerFunc {
 func (s *Server) UploadProfilePic() gin.HandlerFunc {
 	return func(c *gin.Context) {
 
-		user, exists := c.Get("user")
-		if !exists {
-			response.JSON(c, "", http.StatusUnauthorized, nil, []string{"unable to retrieve authenticated user"})
-			return
-		}
+		if userI, exists := c.Get("user"); exists {
+			if user, ok := userI.(*models.User); ok {
 
-		maxSize := int64(2048000) // allow only 2MB of file size
+				const maxSize = int64(2048000) // allow only 2MB of file size
 
-		err = r.ParseMultipartForm(maxSize)
-		if err != nil {
-			log.Println(err)
-			models.HandleResponse(w, r, "Image too large", http.StatusBadRequest, nil)
-			return
-		}
+				r := c.Request
+				err := r.ParseMultipartForm(maxSize)
+				if err != nil {
+					log.Println(err)
+					response.JSON(c, "", http.StatusBadRequest, nil, []string{"image too large"})
+					return
+				}
 
-		file, fileHeader, err := r.FormFile("profile_picture")
-		if err != nil {
-			log.Println(err)
-			models.HandleResponse(w, r, "Image not supplied", http.StatusBadRequest, nil)
-			return
-		}
-		defer file.Close()
+				file, fileHeader, err := r.FormFile("profile_picture")
+				if err != nil {
+					log.Println(err)
+					response.JSON(c, "", http.StatusBadRequest, nil, []string{"image not supplied"})
+					return
+				}
+				defer file.Close()
 
-		// TODO:: Check for file type...
-		supportedFileTypes := map[string]bool{
-			".png":  true,
-			".jpeg": true,
-			".jpg":  true,
-		}
-		filetype := filepath.Ext(fileHeader.Filename)
-		if !supportedFileTypes[filetype] {
-			log.Println(filetype)
-			models.HandleResponse(w, r, "This image file type is not supported", http.StatusBadRequest, nil)
-			return
-		}
-		tempFileName := "profile_pics/" + bson.NewObjectId().Hex() + filetype
-		err = uploadFileToS3(file, tempFileName, fileHeader.Size, handler.config)
-		if err != nil {
-			log.Println(err)
-			models.HandleResponse(w, r, "An Error occured while uploading the image", http.StatusInternalServerError, nil)
-			return
-		}
+				// TODO:: Check for file type...
+				supportedFileTypes := map[string]bool{
+					".png":  true,
+					".jpeg": true,
+					".jpg":  true,
+				}
+				filetype := filepath.Ext(fileHeader.Filename)
+				if !supportedFileTypes[filetype] {
+					log.Println(filetype)
+					response.JSON(c, "", http.StatusBadRequest, nil, []string{"this image file type is not supported"})
+					return
+				}
+				tempFileName := "profile_pics/" + bson.NewObjectId().Hex() + filetype
 
-		imageURL := "https://s3.us-east-2.amazonaws.com/www.all-of.us/" + tempFileName
+				session, err := session.NewSession(&aws.Config{
+					Region: aws.String("us-east-2"),
+					Credentials: credentials.NewStaticCredentials(
+						os.Getenv("AWS_SECRET_ID"),
+						os.Getenv("AWS_SECRET_KEY"),
+						os.Getenv("AWS_TOKEN"),
+					),
+				})
+				if err != nil {
+					log.Printf("could not upload file: %v\n", err)
+				}
 
-		err = handler.config.DB.C("user").Update(bson.M{"email": user}, bson.M{"$set": bson.M{"image": imageURL}})
-		if err != nil {
-			log.Println(err)
-			models.HandleResponse(w, r, "Unable to update user's email.", http.StatusInternalServerError, nil)
-			return
-		}
+				err = uploadFileToS3(session, file, tempFileName, fileHeader.Size)
+				if err != nil {
+					log.Println(err)
+					response.JSON(c, "", http.StatusInternalServerError, nil, []string{"an error occured while uploading the image"})
+					return
+				}
 
-		res := models.Response{}
-		res.Message = "Successfully Created File"
-		res.Status = http.StatusOK
-		res.Data = map[string]interface{}{
-			"imageurl": imageURL,
+				user.Image = os.Getenv("S3_BUCKET") + tempFileName
+				if err = s.DB.UpdateUser(user); err != nil {
+					log.Println(err)
+					response.JSON(c, "", http.StatusInternalServerError, nil, []string{"unable to update user's profile pic"})
+					return
+				}
+
+				response.JSON(c, "successfully created file", http.StatusOK, gin.H{
+					"imageurl": user.Image,
+				}, nil)
+				return
+			}
 		}
-		render.Status(r, http.StatusOK)
-		render.JSON(w, r, res)
+		response.JSON(c, "", http.StatusUnauthorized, nil, []string{"unable to retrieve authenticated user"})
+		return
 	}
 }
 
-func uploadFileToS3(file multipart.File, fileName string, size int64, con *config.Config) error {
+func uploadFileToS3(s *session.Session, file multipart.File, fileName string, size int64) error {
 	// get the file size and read
 	// the file content into a buffer
 	buffer := make([]byte, size)
@@ -326,8 +334,8 @@ func uploadFileToS3(file multipart.File, fileName string, size int64, con *confi
 	// config settings: this is where you choose the bucket,
 	// filename, content-type and storage class of the file
 	// you're uploading
-	_, err := s3.New(con.AwsSession).PutObject(&s3.PutObjectInput{
-		Bucket:               aws.String(con.Constants.S3Bucket),
+	_, err := s3.New(s).PutObject(&s3.PutObjectInput{
+		Bucket:               aws.String(os.Getenv("S3_BUCKET_NAME")),
 		Key:                  aws.String(fileName),
 		ACL:                  aws.String("public-read"),
 		Body:                 bytes.NewReader(buffer),
