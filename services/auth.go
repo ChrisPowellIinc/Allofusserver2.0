@@ -20,8 +20,6 @@ func GetTokenFromHeader(c *gin.Context) string {
 	return ""
 }
 
-//TODO more research on verifying tokens
-
 // verifyAccessToken verifies a token
 func verifyToken(tokenString *string, claims jwt.MapClaims, secret *string) (*jwt.Token, error) {
 	return jwt.ParseWithClaims(*tokenString, claims, func(token *jwt.Token) (interface{}, error) {

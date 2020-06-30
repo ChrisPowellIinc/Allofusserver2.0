@@ -274,7 +274,6 @@ func (s *Server) handleUploadProfilePic() gin.HandlerFunc {
 				}
 				defer file.Close()
 
-				// TODO:: Check for file type...
 				supportedFileTypes := map[string]bool{
 					".png":  true,
 					".jpeg": true,
