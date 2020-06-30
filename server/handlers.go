@@ -249,8 +249,8 @@ func (s *Server) handleGetUserByUsername() gin.HandlerFunc {
 	}
 }
 
-// UploadProfilePic uploads a user's profile picture
-func (s *Server) UploadProfilePic() gin.HandlerFunc {
+// handleUploadProfilePic uploads a user's profile picture
+func (s *Server) handleUploadProfilePic() gin.HandlerFunc {
 	return func(c *gin.Context) {
 
 		if userI, exists := c.Get("user"); exists {
