@@ -2,10 +2,14 @@ package services
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 )
+
+const AccessTokenValidity = time.Minute * 20
+const RefreshTokenValidity = time.Hour * 24
 
 // GetTokenFromHeader returns the token string in the authorization header
 func GetTokenFromHeader(c *gin.Context) string {
