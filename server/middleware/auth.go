@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ChrisPowellIinc/Allofusserver2.0/models"
+	"github.com/ChrisPowellIinc/Allofusserver2.0/server/response"
 	"github.com/ChrisPowellIinc/Allofusserver2.0/servererrors"
 	"github.com/ChrisPowellIinc/Allofusserver2.0/services"
 	"github.com/dgrijalva/jwt-go"
@@ -19,14 +20,13 @@ func Authorize(findUserByEmail func(string) (*models.User, error), tokenInBlackl
 		secret := os.Getenv("JWT_SECRET")
 		accToken := services.GetTokenFromHeader(c)
 		accesstoken, accessClaims, err := services.AuthorizeToken(&accToken, &secret)
-		if err != nil {
-			log.Printf("authorize access token error: %v\n", err)
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-			c.Abort()
+		if err != nil && err.Error() != "Token is expired" {
+			log.Printf("authorize access token error: %s\n", err.Error())
+			respondAndAbort(c, "", http.StatusUnauthorized, nil, []string{"unauthorized"})
 			return
 		}
 
-		if tokenInBlacklist(&accesstoken.Raw) || isTokenExpired(accesstoken) {
+		if tokenInBlacklist(&accesstoken.Raw) {
 			rt := &struct {
 				RefreshToken string `json:"refresh_token,omitempty" binding:"required"`
 			}{}
@@ -38,63 +38,45 @@ func Authorize(findUserByEmail func(string) (*models.User, error), tokenInBlackl
 				return
 			}
 
-			refreshToken, rtClaims, err := services.AuthorizeToken(&rt.RefreshToken, &secret)
+			_, rtClaims, err := services.AuthorizeToken(&rt.RefreshToken, &secret)
 			if err != nil {
 				log.Printf("authorize refresh token error: %v\n", err)
-				c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh token is invalid"})
-				c.Abort()
+				respondAndAbort(c, "", http.StatusUnauthorized, nil, []string{"refresh token is invalid"})
 				return
 			}
 
 			if sub, ok := rtClaims["sub"].(int); ok && sub != 1 {
-				log.Printf("invalid refresh token")
-				c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh token is invalid"})
-				c.Abort()
+				log.Printf("invalid refresh token, the sub claim isn't correct")
+				respondAndAbort(c, "", http.StatusUnauthorized, nil, []string{"refresh token is invalid"})
 				return
 			}
 
-			if !isTokenExpired(refreshToken) {
-				accessClaims["exp"] = time.Now().Add(time.Minute * 20).Unix()
-				newAccessToken, err := services.GenerateToken(jwt.SigningMethodHS256, accessClaims, &secret)
-				if err != nil {
-					log.Printf("generate new access token error: %v\n", err)
-					c.JSON(http.StatusUnauthorized, gin.H{"error": "can't generate new access token"})
-					c.Abort()
-					return
-				}
-				c.JSON(http.StatusOK, gin.H{"message": "new access token generated", "access_token": *newAccessToken})
-				c.Abort()
+			//generate a new access token, and rest its exp time
+			accessClaims["exp"] = time.Now().Add(services.AccessTokenValidity).Unix()
+			newAccessToken, err := services.GenerateToken(jwt.SigningMethodHS256, accessClaims, &secret)
+			if err != nil {
+				log.Printf("can't generate new access token: %v\n", err)
+				respondAndAbort(c, "", http.StatusUnauthorized, nil, []string{"can't generate new access token"})
 				return
 			}
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "access and refresh token expired"})
-			c.Redirect(http.StatusUnauthorized, "/api/v1/auth/login") //TODO testing
-			c.Abort()
+			respondAndAbort(c, "new access token generated", http.StatusOK, gin.H{"access_token": *newAccessToken}, []string{"access token is invalid"})
 			return
 		}
-
-		//check if token is expired...
-		//if token is expired check the refresh token is expired
-		//if refresh aint expired, the regen new access token and send back to client
-		//but ABORT the request
-		//
 
 		user := &models.User{}
 		if email, ok := accessClaims["user_email"].(string); ok {
 			if user, err = findUserByEmail(email); err != nil {
 				if inactiveErr, ok := err.(servererrors.InActiveUserError); ok {
-					c.JSON(http.StatusBadRequest, gin.H{"error": inactiveErr.Error()})
-					c.Abort()
+					respondAndAbort(c, "", http.StatusBadRequest, nil, []string{inactiveErr.Error()})
 					return
 				}
 				log.Printf("find user by email error: %v\n", err)
-				c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-				c.Abort()
+				respondAndAbort(c, "", http.StatusNotFound, nil, []string{"user not found"})
 				return
 			}
 		} else {
 			log.Printf("user email is not string\n")
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
-			c.Abort()
+			respondAndAbort(c, "", http.StatusInternalServerError, nil, []string{"internal server error"})
 			return
 		}
 
@@ -106,9 +88,9 @@ func Authorize(findUserByEmail func(string) (*models.User, error), tokenInBlackl
 	}
 }
 
-func isTokenExpired(token *jwt.Token) bool {
-	if exp, ok := token.Claims.(jwt.MapClaims)["exp"].(int64); ok {
-		return time.Now().Unix() > exp
-	}
-	return false
+// respondAndAbort calls response.JSON
+//and aborts the Context
+func respondAndAbort(c *gin.Context, message string, status int, data interface{}, errs []string) {
+	response.JSON(c, message, status, data, errs)
+	c.Abort()
 }
