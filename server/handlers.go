@@ -1,19 +1,26 @@
 package server
 
 import (
+	"bytes"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/ChrisPowellIinc/Allofusserver2.0/db"
 	"github.com/ChrisPowellIinc/Allofusserver2.0/models"
+	"github.com/ChrisPowellIinc/Allofusserver2.0/server/response"
 	"github.com/ChrisPowellIinc/Allofusserver2.0/servererrors"
 	"github.com/ChrisPowellIinc/Allofusserver2.0/services"
-	"github.com/ChrisPowellIinc/Allofusserver2.0/server/response"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
+	"github.com/globalsign/mgo/bson"
 	"golang.org/x/crypto/bcrypt"
+	"honnef.co/go/tools/config"
 )
 
 func (s *Server) handleSignup() gin.HandlerFunc {
@@ -80,10 +87,10 @@ func (s *Server) handleLogin() gin.HandlerFunc {
 
 		accessClaims := jwt.MapClaims{
 			"user_email": user.Email,
-			"exp":        time.Now().Add(time.Minute * 20).Unix(),
+			"exp":        time.Now().Add(services.AccessTokenValidity).Unix(),
 		}
 		refreshClaims := jwt.MapClaims{
-			"exp": time.Now().Add(time.Hour * 24).Unix(),
+			"exp": time.Now().Add(services.RefreshTokenValidity).Unix(),
 			"sub": 1,
 		}
 
@@ -243,72 +250,72 @@ func (s *Server) handleGetUserByUsername() gin.HandlerFunc {
 	}
 }
 
-/*
 // UploadProfilePic uploads a user's profile picture
-func (handler *Handler) UploadProfilePic(w http.ResponseWriter, r *http.Request) {
-	userEmail, err := jwt.GetLoggedInUserEmail(r.Context())
-	if err != nil {
-		log.Println(err)
-		models.HandleResponse(w, r, "Unable to retrieve authenticated user.", http.StatusUnauthorized, nil)
-		return
-	}
+func (s *Server) UploadProfilePic() gin.HandlerFunc {
+	return func(c *gin.Context) {
 
-	maxSize := int64(2048000) // allow only 2MB of file size
+		user, exists := c.Get("user")
+		if !exists {
+			response.JSON(c, "", http.StatusUnauthorized, nil, []string{"unable to retrieve authenticated user"})
+			return
+		}
 
-	err = r.ParseMultipartForm(maxSize)
-	if err != nil {
-		log.Println(err)
-		models.HandleResponse(w, r, "Image too large", http.StatusBadRequest, nil)
-		return
-	}
+		maxSize := int64(2048000) // allow only 2MB of file size
 
-	file, fileHeader, err := r.FormFile("profile_picture")
-	if err != nil {
-		log.Println(err)
-		models.HandleResponse(w, r, "Image not supplied", http.StatusBadRequest, nil)
-		return
-	}
-	defer file.Close()
+		err = r.ParseMultipartForm(maxSize)
+		if err != nil {
+			log.Println(err)
+			models.HandleResponse(w, r, "Image too large", http.StatusBadRequest, nil)
+			return
+		}
 
-	// TODO:: Check for file type...
-	supportedFileTypes := map[string]bool{
-		".png":  true,
-		".jpeg": true,
-		".jpg":  true,
-	}
-	filetype := filepath.Ext(fileHeader.Filename)
-	if !supportedFileTypes[filetype] {
-		log.Println(filetype)
-		models.HandleResponse(w, r, "This image file type is not supported", http.StatusBadRequest, nil)
-		return
-	}
-	tempFileName := "profile_pics/" + bson.NewObjectId().Hex() + filetype
-	err = uploadFileToS3(file, tempFileName, fileHeader.Size, handler.config)
-	if err != nil {
-		log.Println(err)
-		models.HandleResponse(w, r, "An Error occured while uploading the image", http.StatusInternalServerError, nil)
-		return
-	}
+		file, fileHeader, err := r.FormFile("profile_picture")
+		if err != nil {
+			log.Println(err)
+			models.HandleResponse(w, r, "Image not supplied", http.StatusBadRequest, nil)
+			return
+		}
+		defer file.Close()
 
-	imageURL := "https://s3.us-east-2.amazonaws.com/www.all-of.us/" + tempFileName
+		// TODO:: Check for file type...
+		supportedFileTypes := map[string]bool{
+			".png":  true,
+			".jpeg": true,
+			".jpg":  true,
+		}
+		filetype := filepath.Ext(fileHeader.Filename)
+		if !supportedFileTypes[filetype] {
+			log.Println(filetype)
+			models.HandleResponse(w, r, "This image file type is not supported", http.StatusBadRequest, nil)
+			return
+		}
+		tempFileName := "profile_pics/" + bson.NewObjectId().Hex() + filetype
+		err = uploadFileToS3(file, tempFileName, fileHeader.Size, handler.config)
+		if err != nil {
+			log.Println(err)
+			models.HandleResponse(w, r, "An Error occured while uploading the image", http.StatusInternalServerError, nil)
+			return
+		}
 
-	err = handler.config.DB.C("user").Update(bson.M{"email": userEmail}, bson.M{"$set": bson.M{"image": imageURL}})
-	if err != nil {
-		log.Println(err)
-		models.HandleResponse(w, r, "Unable to update user's email.", http.StatusInternalServerError, nil)
-		return
-	}
+		imageURL := "https://s3.us-east-2.amazonaws.com/www.all-of.us/" + tempFileName
 
-	res := models.Response{}
-	res.Message = "Successfully Created File"
-	res.Status = http.StatusOK
-	res.Data = map[string]interface{}{
-		"imageurl": imageURL,
+		err = handler.config.DB.C("user").Update(bson.M{"email": user}, bson.M{"$set": bson.M{"image": imageURL}})
+		if err != nil {
+			log.Println(err)
+			models.HandleResponse(w, r, "Unable to update user's email.", http.StatusInternalServerError, nil)
+			return
+		}
+
+		res := models.Response{}
+		res.Message = "Successfully Created File"
+		res.Status = http.StatusOK
+		res.Data = map[string]interface{}{
+			"imageurl": imageURL,
+		}
+		render.Status(r, http.StatusOK)
+		render.JSON(w, r, res)
 	}
-	render.Status(r, http.StatusOK)
-	render.JSON(w, r, res)
 }
-
 
 func uploadFileToS3(file multipart.File, fileName string, size int64, con *config.Config) error {
 	// get the file size and read
@@ -332,5 +339,3 @@ func uploadFileToS3(file multipart.File, fileName string, size int64, con *confi
 	})
 	return err
 }
-
-*/
