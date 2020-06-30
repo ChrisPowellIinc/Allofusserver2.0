@@ -38,6 +38,12 @@ func Authorize(findUserByEmail func(string) (*models.User, error), tokenInBlackl
 				return
 			}
 
+			if tokenInBlacklist(&rt.RefreshToken) {
+				log.Printf("refresh token is blacklisted: %v\n", err)
+				respondAndAbort(c, "", http.StatusUnauthorized, nil, []string{"refresh token is invalid"})
+				return
+			}
+
 			_, rtClaims, err := services.AuthorizeToken(&rt.RefreshToken, &secret)
 			if err != nil {
 				log.Printf("authorize refresh token error: %v\n", err)
