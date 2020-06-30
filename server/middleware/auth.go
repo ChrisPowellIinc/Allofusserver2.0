@@ -65,11 +65,12 @@ func Authorize(findUserByEmail func(string) (*models.User, error), tokenInBlackl
 				respondAndAbort(c, "", http.StatusUnauthorized, nil, []string{"can't generate new access token"})
 				return
 			}
+			//TODO is this okay?
 			respondAndAbort(c, "new access token generated", http.StatusOK, gin.H{"access_token": *newAccessToken}, []string{"access token is invalid"})
 			return
 		}
 
-		user := &models.User{}
+		var user *models.User
 		if email, ok := accessClaims["user_email"].(string); ok {
 			if user, err = findUserByEmail(email); err != nil {
 				if inactiveErr, ok := err.(servererrors.InActiveUserError); ok {
