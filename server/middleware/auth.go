@@ -26,6 +26,9 @@ func Authorize(findUserByEmail func(string) (*models.User, error), tokenInBlackl
 			return
 		}
 
+		//TODO find a way to make sure accesstoken wont be nil, because we allow
+		//a token is epired error to reach here accessToken will be nill
+		//when that happens
 		if tokenInBlacklist(&accesstoken.Raw) {
 			rt := &struct {
 				RefreshToken string `json:"refresh_token,omitempty" binding:"required"`
