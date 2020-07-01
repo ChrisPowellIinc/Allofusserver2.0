@@ -74,7 +74,7 @@ func Authorize(findUserByEmail func(string) (*models.User, error), tokenInBlackl
 				respondAndAbort(c, "", http.StatusUnauthorized, nil, []string{"can't generate new access token"})
 				return
 			}
-			//TODO is this okay?
+			log.Printf("new access token generated for refresh token")
 			respondAndAbort(c, "new access token generated", http.StatusOK, gin.H{"access_token": *newAccessToken}, []string{"access token is invalid"})
 			return
 		}
