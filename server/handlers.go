@@ -285,7 +285,7 @@ func (s *Server) handleUploadProfilePic() gin.HandlerFunc {
 				r := c.Request
 				err := r.ParseMultipartForm(maxSize)
 				if err != nil {
-					log.Println(err)
+					log.Printf("parse image error: %v\n", err)
 					response.JSON(c, "", http.StatusBadRequest, nil, []string{"image too large"})
 					return
 				}
@@ -303,13 +303,13 @@ func (s *Server) handleUploadProfilePic() gin.HandlerFunc {
 					".jpeg": true,
 					".jpg":  true,
 				}
-				filetype := filepath.Ext(fileHeader.Filename)
-				if !supportedFileTypes[filetype] {
-					log.Println(filetype)
-					response.JSON(c, "", http.StatusBadRequest, nil, []string{"this image file type is not supported"})
+				fileExtension := filepath.Ext(fileHeader.Filename)
+				if !supportedFileTypes[fileExtension] {
+					log.Println(fileExtension)
+					response.JSON(c, "", http.StatusBadRequest, nil, []string{fileExtension + " image file type is not supported"})
 					return
 				}
-				tempFileName := "profile_pics/" + bson.NewObjectId().Hex() + filetype
+				tempFileName := "profile_pics/" + bson.NewObjectId().Hex() + fileExtension
 
 				session, err := session.NewSession(&aws.Config{
 					Region: aws.String("us-east-2"),
