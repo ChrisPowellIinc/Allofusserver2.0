@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/ChrisPowellIinc/Allofusserver2.0/models"
@@ -19,8 +20,8 @@ func Authorize(findUserByEmail func(string) (*models.User, error), tokenInBlackl
 	return func(c *gin.Context) {
 		secret := os.Getenv("JWT_SECRET")
 		accToken := services.GetTokenFromHeader(c)
-		accesstoken, accessClaims, err := services.AuthorizeToken(&accToken, &secret)
-		if err != nil && err.Error() != "Token is expired" {
+		accessToken, accessClaims, err := services.AuthorizeToken(&accToken, &secret)
+		if err != nil && !strings.Contains(err.Error(), "Token is expired") {
 			log.Printf("authorize access token error: %s\n", err.Error())
 			respondAndAbort(c, "", http.StatusUnauthorized, nil, []string{"unauthorized"})
 			return
@@ -29,15 +30,14 @@ func Authorize(findUserByEmail func(string) (*models.User, error), tokenInBlackl
 		//TODO find a way to make sure accesstoken wont be nil, because we allow
 		//a token is epired error to reach here accessToken will be nill
 		//when that happens
-		if tokenInBlacklist(&accesstoken.Raw) {
+		if tokenInBlacklist(&accessToken.Raw) || isTokenExpired(accessClaims) {
 			rt := &struct {
 				RefreshToken string `json:"refresh_token,omitempty" binding:"required"`
 			}{}
 
 			if err := c.ShouldBindJSON(rt); err != nil {
 				log.Printf("no refresh token in request body: %v\n", err)
-				c.JSON(http.StatusBadRequest, gin.H{"error": "unauthorized"})
-				c.Abort()
+				respondAndAbort(c, "", http.StatusBadRequest, nil, []string{"unauthorized"})
 				return
 			}
 
@@ -54,7 +54,13 @@ func Authorize(findUserByEmail func(string) (*models.User, error), tokenInBlackl
 				return
 			}
 
-			if sub, ok := rtClaims["sub"].(int); ok && sub != 1 {
+			if isTokenExpired(rtClaims) {
+				log.Printf("refresh token is expired")
+				respondAndAbort(c, "", http.StatusUnauthorized, nil, []string{"refresh token is invalid"})
+				return
+			}
+
+			if sub, ok := rtClaims["sub"].(float64); ok && sub != 1 {
 				log.Printf("invalid refresh token, the sub claim isn't correct")
 				respondAndAbort(c, "", http.StatusUnauthorized, nil, []string{"refresh token is invalid"})
 				return
@@ -92,7 +98,7 @@ func Authorize(findUserByEmail func(string) (*models.User, error), tokenInBlackl
 
 		// set the user and token as context parameters.
 		c.Set("user", user)
-		c.Set("access_token", accesstoken.Raw)
+		c.Set("access_token", accessToken.Raw)
 		// calling next handler
 		c.Next()
 	}
@@ -103,4 +109,11 @@ func Authorize(findUserByEmail func(string) (*models.User, error), tokenInBlackl
 func respondAndAbort(c *gin.Context, message string, status int, data interface{}, errs []string) {
 	response.JSON(c, message, status, data, errs)
 	c.Abort()
+}
+
+func isTokenExpired(claims jwt.MapClaims) bool {
+	if exp, ok := claims["exp"].(float64); ok {
+		return float64(time.Now().Unix()) > exp
+	}
+	return true
 }
