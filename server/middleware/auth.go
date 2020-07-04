@@ -4,7 +4,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/ChrisPowellIinc/Allofusserver2.0/models"
@@ -21,7 +20,7 @@ func Authorize(findUserByEmail func(string) (*models.User, error), tokenInBlackl
 		secret := os.Getenv("JWT_SECRET")
 		accToken := services.GetTokenFromHeader(c)
 		accessToken, accessClaims, err := services.AuthorizeToken(&accToken, &secret)
-		if err != nil && !strings.Contains(err.Error(), "Token is expired") {
+		if err != nil {
 			log.Printf("authorize access token error: %s\n", err.Error())
 			respondAndAbort(c, "", http.StatusUnauthorized, nil, []string{"unauthorized"})
 			return
