@@ -2,69 +2,38 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
 	"github.com/ChrisPowellIinc/Allofusserver2.0/db"
 	"github.com/ChrisPowellIinc/Allofusserver2.0/router"
 	"github.com/ChrisPowellIinc/Allofusserver2.0/server/middleware"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"github.com/go-playground/validator"
 )
 
+// Server serves requests to DB with router
 type Server struct {
 	DB     db.DB
 	Router *router.Router
 }
 
-func (s *Server) respond(w http.ResponseWriter, r *http.Request, data interface{}, status int) {
-	w.WriteHeader(status)
-	if data != nil {
-		_ = json.NewEncoder(w).Encode(data)
-		// TODO: handle err
-	}
-}
-
-func (s *Server) decode(w http.ResponseWriter, r *http.Request, v interface{}) error {
-	return json.NewDecoder(r.Body).Decode(v)
-}
-
 func (s *Server) defineRoutes(router *gin.Engine) {
-	router.Use(middleware.Authorize)
-	router.POST("/auth/signup", s.handleSignup())
-	router.POST("/auth/login", s.handleLogin())
-	authorized := router.Group("/")
-	authorized.GET("/home") // testing the authorized route
-}
+	apirouter := router.Group("/api/v1")
+	apirouter.POST("/auth/signup", s.handleSignup())
+	apirouter.POST("/auth/login", s.handleLogin())
 
-// fieldErrors
-type fieldError struct {
-	err validator.FieldError
-}
-
-func (q fieldError) String() string {
-	var sb strings.Builder
-
-	sb.WriteString("validation failed on field '" + q.err.Field() + "'")
-	sb.WriteString(", condition: " + q.err.ActualTag())
-
-	// Print condition parameters, e.g. oneof=red blue -> { red blue }
-	if q.err.Param() != "" {
-		sb.WriteString(" { " + q.err.Param() + " }")
-	}
-
-	if q.err.Value() != nil && q.err.Value() != "" {
-		sb.WriteString(fmt.Sprintf(", actual: %v", q.err.Value()))
-	}
-
-	return sb.String()
+	authorized := apirouter.Group("/")
+	authorized.Use(middleware.Authorize(s.DB.FindUserByEmail, s.DB.TokenInBlacklist))
+	authorized.POST("/logout", s.handleLogout())
+	authorized.GET("/users", s.handleGetUsers())
+	authorized.PUT("/me/update", s.handleUpdateUserDetails())
+	authorized.GET("/me", s.handleShowProfile())
 }
 
 func (s *Server) setupRouter() *gin.Engine {
@@ -74,7 +43,7 @@ func (s *Server) setupRouter() *gin.Engine {
 		s.defineRoutes(r)
 		return r
 	}
-	r := gin.Default()
+	r := gin.New()
 	// LoggerWithFormatter middleware will write the logs to gin.DefaultWriter
 	// By default gin.DefaultWriter = os.Stdout
 	r.Use(gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
@@ -90,6 +59,19 @@ func (s *Server) setupRouter() *gin.Engine {
 			param.Request.UserAgent(),
 			param.ErrorMessage,
 		)
+	}))
+	r.Use(gin.Recovery())
+	// setup cors
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"*"},
+		AllowMethods:     []string{"POST", "GET", "PUT", "PATCH"},
+		AllowHeaders:     []string{"*"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		// AllowOriginFunc: func(origin string) bool {
+		// 	return origin == "https://github.com"
+		// },
+		MaxAge: 12 * time.Hour,
 	}))
 	s.defineRoutes(r)
 	return r

@@ -1,21 +1,29 @@
 package server
 
 import (
+	"bytes"
 	"log"
+	"mime/multipart"
 	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/ChrisPowellIinc/Allofusserver2.0/db"
 	"github.com/ChrisPowellIinc/Allofusserver2.0/models"
+	"github.com/ChrisPowellIinc/Allofusserver2.0/server/response"
+	"github.com/ChrisPowellIinc/Allofusserver2.0/servererrors"
 	"github.com/ChrisPowellIinc/Allofusserver2.0/services"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
-	"github.com/go-playground/validator"
+	"github.com/globalsign/mgo/bson"
+	validator "github.com/go-playground/validator/v10"
 	"golang.org/x/crypto/bcrypt"
 )
-
-// TODO: use env variables to store secret
-const JWTSecret = "JWTSecret"
 
 func (s *Server) handleSignup() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -32,141 +40,337 @@ func (s *Server) handleSignup() gin.HandlerFunc {
 		user.Password, err = bcrypt.GenerateFromPassword([]byte(user.PasswordString), bcrypt.DefaultCost)
 		if err != nil {
 			log.Printf("hash password err: %v\n", err)
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"message": "Sorry a problem occured, please try again",
-				"status":  http.StatusInternalServerError,
-			})
+			response.JSON(c, "", http.StatusInternalServerError, nil, []string{"internal server error"})
 			return
 		}
 		user, err = s.DB.CreateUser(user)
 		if err != nil {
 			log.Printf("create user err: %v\n", err)
-			err, ok := err.(db.ValidationError)
-			if ok {
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"errors": []string{err.Error()},
-					"Status": http.StatusBadRequest,
-				})
+			if err, ok := err.(db.ValidationError); ok {
+				response.JSON(c, "", http.StatusBadRequest, nil, []string{err.Error()})
 				return
 			}
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"message": "Sorry a problem occured, please try again",
-				"Status":  http.StatusInternalServerError,
-			})
+			response.JSON(c, "", http.StatusInternalServerError, nil, []string{"internal server error"})
 			return
 		}
-
-		c.JSON(http.StatusCreated, gin.H{
-			"message": "signup successful",
-		})
+		response.JSON(c, "signup successful", http.StatusCreated, nil, nil)
 	}
 }
 
 func (s *Server) handleLogin() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var user models.User
-		type Login struct {
-			Username string `json:"username"`
-			Password string `json:"password"`
-		}
-		var loginRequest Login
-		if err := c.ShouldBindJSON(&loginRequest); err != nil {
-			errs := []string{}
-			if err, ok := err.(validator.ValidationErrors); ok {
-				for _, fieldErr := range err {
-					errs = append(errs, fieldError{fieldErr}.String())
-				}
-				c.JSON(http.StatusBadRequest, gin.H{"errors": errs})
-			} else {
-				c.JSON(http.StatusUnauthorized, gin.H{"errors": []string{"username or password incorrect"}})
-			}
+		user := &models.User{}
+		loginRequest := &struct {
+			Username string `json:"username" binding:"required"`
+			Password string `json:"password" binding:"required"`
+		}{}
+
+		if errs := s.decode(c, loginRequest); errs != nil {
+			response.JSON(c, "", http.StatusBadRequest, nil, errs)
 			return
 		}
 		// Check if the user with that username exists
 		user, err := s.DB.FindUserByUsername(loginRequest.Username)
 		if err != nil {
+			if inactiveErr, ok := err.(servererrors.InActiveUserError); ok {
+				response.JSON(c, "", http.StatusBadRequest, nil, []string{inactiveErr.Error()})
+				return
+			}
 			log.Printf("No user: %v\n", err)
-			c.JSON(http.StatusUnauthorized, gin.H{"errors": []string{"username or password incorrect"}})
+			response.JSON(c, "", http.StatusUnauthorized, nil, []string{"user not found"})
 			return
 		}
-		err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(loginRequest.Password))
+		log.Printf("%v\n%s\n", user.Password, string(user.Password))
+		err = bcrypt.CompareHashAndPassword(user.Password, []byte(loginRequest.Password))
 		if err != nil {
-			log.Printf("Passwords do not match %v\n", err)
-			c.JSON(http.StatusUnauthorized, gin.H{"errors": []string{"username or password incorrect"}})
+			log.Printf("passwords do not match %v\n", err)
+			response.JSON(c, "", http.StatusUnauthorized, nil, []string{"username or password incorrect"})
 			return
 		}
 
-		// Create a new token object, specifying signing method and the claims
-		// you would like it to contain.
-		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"user_email": user.Email})
+		accessClaims := jwt.MapClaims{
+			"user_email": user.Email,
+			"exp":        time.Now().Add(services.AccessTokenValidity).Unix(),
+		}
+		refreshClaims := jwt.MapClaims{
+			"exp": time.Now().Add(services.RefreshTokenValidity).Unix(),
+			"sub": 1,
+		}
 
-		// Sign and get the complete encoded token as a string using the secret
-		tokenString, err := token.SignedString([]byte(JWTSecret))
-
-		// _, token, err := jwt.TokenAuth.Encode(jwtauth.Claims{"user_email": user.Email})
-
+		secret := os.Getenv("JWT_SECRET")
+		accToken, err := services.GenerateToken(jwt.SigningMethodHS256, accessClaims, &secret)
 		if err != nil {
-			log.Printf("token signing err %v\n", err)
-			c.JSON(http.StatusUnauthorized, gin.H{"errors": []string{"username or password incorrect"}})
+			log.Printf("token generation error err: %v\n", err)
+			response.JSON(c, "", http.StatusInternalServerError, nil, []string{"internal server error"})
 			return
 		}
 
-		// Data: map[string]interface{}{
-		// 	"token":      tokenString,
-		// 	"first_name": user.FirstName,
-		// 	"last_name":  user.LastName,
-		// 	"phone":      user.Phone,
-		// 	"email":      user.Email,
-		// 	"username":   user.Username,
-		// 	"image":      user.Image,
-		// },
+		refreshToken, err := services.GenerateToken(jwt.SigningMethodHS256, refreshClaims, &secret)
+		if err != nil {
+			log.Printf("token generation error err: %v\n", err)
+			response.JSON(c, "", http.StatusInternalServerError, nil, []string{"internal server error"})
+			return
+		}
 
-		//change user status to active
-		user.Status = "active"
-		c.JSON(http.StatusOK, gin.H{
-			"message": "login successful",
-			"data": map[string]interface{}{
-				"user":  user,
-				"token": tokenString,
-			},
-		})
+		response.JSON(c, "login successful", http.StatusOK, gin.H{
+			"user":          user,
+			"access_token":  *accToken,
+			"refresh_token": *refreshToken,
+		}, nil)
 	}
 }
 
 func (s *Server) handleLogout() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		tokenString := c.Request.Header.Get("Authorization")
-		claims := jwt.MapClaims{}
-		token, err := services.VerifyToken(tokenString, claims, JWTSecret)
-		if err != nil {
-			log.Printf("error getting token: %v\n", err)
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"}) //TODO make this meaningful
+
+		if tokenI, exists := c.Get("access_token"); exists {
+			if userI, exists := c.Get("user"); exists {
+				if user, ok := userI.(*models.User); ok {
+					if accessToken, ok := tokenI.(string); ok {
+
+						rt := &struct {
+							RefreshToken string `json:"refresh_token,omitempty" binding:"required"`
+						}{}
+
+						if err := c.ShouldBindJSON(rt); err != nil {
+							log.Printf("no refresh token in request body: %v\n", err)
+							response.JSON(c, "", http.StatusBadRequest, nil, []string{"unauthorized"})
+							return
+						}
+
+						accBlacklist := &models.Blacklist{
+							Email:     user.Email,
+							CreatedAt: time.Now(),
+							Token:     accessToken,
+						}
+
+						err := s.DB.AddToBlackList(accBlacklist)
+						if err != nil {
+							log.Printf("can't add access token to blacklist: %v\n", err)
+							response.JSON(c, "logout failed", http.StatusInternalServerError, nil, []string{"couldn't revoke access token"})
+							return
+						}
+
+						refreshBlacklist := &models.Blacklist{
+							Email:     user.Email,
+							CreatedAt: time.Now(),
+							Token:     rt.RefreshToken,
+						}
+
+						err = s.DB.AddToBlackList(refreshBlacklist)
+						if err != nil {
+							log.Printf("can't add refresh token to blacklist: %v\n", err)
+							response.JSON(c, "logout failed", http.StatusInternalServerError, nil, []string{"couldn't revoke refresh token"})
+							return
+						}
+						response.JSON(c, "logout successful", http.StatusOK, nil, nil)
+						return
+					}
+				}
+			}
+		}
+		log.Printf("can't get info from context\n")
+		response.JSON(c, "", http.StatusInternalServerError, nil, []string{"internal server error"})
+		return
+	}
+}
+
+// handleShowProfile returns user's details
+func (s *Server) handleShowProfile() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if userI, exists := c.Get("user"); exists {
+			if user, ok := userI.(*models.User); ok {
+				response.JSON(c, "user details retrieved correctly", http.StatusOK, gin.H{
+					"email":      user.Email,
+					"phone":      user.Phone,
+					"first_name": user.FirstName,
+					"last_name":  user.LastName,
+					"image":      user.Image,
+					"username":   user.Username,
+				}, nil)
+				return
+			}
+		}
+		log.Printf("can't get user from context\n")
+		response.JSON(c, "", http.StatusInternalServerError, nil, []string{"internal server error"})
+	}
+}
+
+func (s *Server) handleUpdateUserDetails() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if userI, exists := c.Get("user"); exists {
+			if user, ok := userI.(*models.User); ok {
+
+				username, email := user.Username, user.Email
+				if errs := s.decode(c, user); errs != nil {
+					response.JSON(c, "", http.StatusBadRequest, nil, errs)
+					return
+				}
+
+				//TODO try to eliminate this
+				user.Username, user.Email = username, email
+				user.UpdatedAt = time.Now()
+				if err := s.DB.UpdateUser(user); err != nil {
+					log.Printf("update user error : %v\n", err)
+					response.JSON(c, "", http.StatusInternalServerError, nil, []string{"internal server error"})
+					return
+				}
+				response.JSON(c, "user updated successfuly", http.StatusOK, nil, nil)
+				return
+			}
+		}
+		log.Printf("can't get user from context\n")
+		response.JSON(c, "", http.StatusInternalServerError, nil, []string{"internal server error"})
+	}
+}
+
+func (s *Server) handleGetUsers() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if userI, exists := c.Get("user"); exists {
+			if user, ok := userI.(*models.User); ok {
+				users, err := s.DB.FindAllUsersExcept(user.Email)
+				if err != nil {
+					log.Printf("find users error : %v\n", err)
+					response.JSON(c, "", http.StatusInternalServerError, nil, []string{"internal server error"})
+					return
+				}
+				response.JSON(c, "retrieved users sucessfully", http.StatusOK, gin.H{"users": users}, nil)
+				return
+			}
+		}
+		log.Printf("can't get user from context\n")
+		response.JSON(c, "", http.StatusInternalServerError, nil, []string{"internal server error"})
+		return
+	}
+}
+
+func (s *Server) handleGetUserByUsername() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		name := &struct {
+			Username string `json:"username" binding:"required"`
+		}{}
+
+		if errs := s.decode(c, name); errs != nil {
+			response.JSON(c, "", http.StatusBadRequest, nil, errs)
 			return
 		}
 
-		if email, ok := claims["user_email"].(string); ok {
-			_, err := s.DB.FindUserByEmail(email)
-			if err != nil {
-				c.JSON(http.StatusNotFound, gin.H{"error": err})
+		user, err := s.DB.FindUserByUsername(name.Username)
+		if err != nil {
+			if inactiveErr, ok := err.(servererrors.InActiveUserError); ok {
+				response.JSON(c, "", http.StatusBadRequest, nil, []string{inactiveErr.Error()})
 				return
 			}
-			// if user.Status != "active" {
-			// 	c.JSON(http.StatusForbidden, gin.H{"errors": "user already logged out"})
-			// 	return
-			// }
-			// user.Status = "inactive"
-			var blacklist models.Blacklist
-			blacklist.Email = email
-			blacklist.CreatedAt = time.Now()
-			blacklist.Token = token.Raw
-			if err = s.DB.PutInBlackList(blacklist); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"logout failed": err})
-				return
-			}
-		} else {
-			log.Printf("user email is not string\n")
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+			log.Printf("find user error : %v\n", err)
+			response.JSON(c, "user not found", http.StatusNotFound, nil, []string{"user not found"})
 			return
 		}
+
+		response.JSON(c, "user retrieved successfully", http.StatusOK, gin.H{
+			"email":      user.Email,
+			"phone":      user.Phone,
+			"first_name": user.FirstName,
+			"last_name":  user.LastName,
+			"image":      user.Image,
+			"username":   user.Username,
+		}, nil)
 	}
+}
+
+// handleUploadProfilePic uploads a user's profile picture
+func (s *Server) handleUploadProfilePic() gin.HandlerFunc {
+	return func(c *gin.Context) {
+
+		if userI, exists := c.Get("user"); exists {
+			if user, ok := userI.(*models.User); ok {
+
+				const maxSize = int64(2048000) // allow only 2MB of file size
+
+				r := c.Request
+				err := r.ParseMultipartForm(maxSize)
+				if err != nil {
+					log.Printf("parse image error: %v\n", err)
+					response.JSON(c, "", http.StatusBadRequest, nil, []string{"image too large"})
+					return
+				}
+
+				file, fileHeader, err := r.FormFile("profile_picture")
+				if err != nil {
+					log.Println(err)
+					response.JSON(c, "", http.StatusBadRequest, nil, []string{"image not supplied"})
+					return
+				}
+				defer file.Close()
+
+				supportedFileTypes := map[string]bool{
+					".png":  true,
+					".jpeg": true,
+					".jpg":  true,
+				}
+				fileExtension := filepath.Ext(fileHeader.Filename)
+				if !supportedFileTypes[fileExtension] {
+					log.Println(fileExtension)
+					response.JSON(c, "", http.StatusBadRequest, nil, []string{fileExtension + " image file type is not supported"})
+					return
+				}
+				tempFileName := "profile_pics/" + bson.NewObjectId().Hex() + fileExtension
+
+				session, err := session.NewSession(&aws.Config{
+					Region: aws.String(os.Getenv("AWS_REGION")),
+					Credentials: credentials.NewStaticCredentials(
+						os.Getenv("AWS_SECRET_ID"),
+						os.Getenv("AWS_SECRET_KEY"),
+						os.Getenv("AWS_TOKEN"),
+					),
+				})
+				if err != nil {
+					log.Printf("could not upload file: %v\n", err)
+				}
+
+				err = uploadFileToS3(session, file, tempFileName, fileHeader.Size)
+				if err != nil {
+					log.Println(err)
+					response.JSON(c, "", http.StatusInternalServerError, nil, []string{"an error occured while uploading the image"})
+					return
+				}
+
+				user.Image = os.Getenv("S3_BUCKET") + tempFileName
+				if err = s.DB.UpdateUser(user); err != nil {
+					log.Println(err)
+					response.JSON(c, "", http.StatusInternalServerError, nil, []string{"unable to update user's profile pic"})
+					return
+				}
+
+				response.JSON(c, "successfully created file", http.StatusOK, gin.H{
+					"imageurl": user.Image,
+				}, nil)
+				return
+			}
+		}
+		response.JSON(c, "", http.StatusUnauthorized, nil, []string{"unable to retrieve authenticated user"})
+		return
+	}
+}
+
+func uploadFileToS3(s *session.Session, file multipart.File, fileName string, size int64) error {
+	// get the file size and read
+	// the file content into a buffer
+	buffer := make([]byte, size)
+	file.Read(buffer)
+
+	// config settings: this is where you choose the bucket,
+	// filename, content-type and storage class of the file
+	// you're uploading
+	_, err := s3.New(s).PutObject(&s3.PutObjectInput{
+		Bucket:               aws.String(os.Getenv("S3_BUCKET_NAME")),
+		Key:                  aws.String(fileName),
+		ACL:                  aws.String("public-read"),
+		Body:                 bytes.NewReader(buffer),
+		ContentLength:        aws.Int64(int64(size)),
+		ContentType:          aws.String(http.DetectContentType(buffer)),
+		ContentDisposition:   aws.String("attachment"),
+		ServerSideEncryption: aws.String("AES256"),
+		StorageClass:         aws.String("INTELLIGENT_TIERING"),
+	})
+	return err
 }
