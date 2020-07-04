@@ -37,7 +37,6 @@ func (mdb *MongoDB) Init() {
 
 // CreateUser creates a new user in the DB
 func (mdb *MongoDB) CreateUser(user *models.User) (*models.User, error) {
-	user.CreatedAt = time.Now()
 	_, err := mdb.FindUserByEmail(user.Email)
 	if err == nil {
 		return user, ValidationError{Field: "email", Message: "already in use"}
@@ -50,7 +49,8 @@ func (mdb *MongoDB) CreateUser(user *models.User) (*models.User, error) {
 	if err == nil {
 		return user, ValidationError{Field: "phone", Message: "already in use"}
 	}
-	err = mdb.DB.C("user").Insert(&user)
+	user.CreatedAt = time.Now()
+	err = mdb.DB.C("user").Insert(user)
 	return user, err
 }
 
@@ -77,7 +77,7 @@ func (mdb *MongoDB) FindUserByEmail(email string) (*models.User, error) {
 // FindUserByPhone finds a user by the phone
 func (mdb MongoDB) FindUserByPhone(phone string) (*models.User, error) {
 	user := &models.User{}
-	err := mdb.DB.C("user").Find(bson.M{"phone": phone}).One(&user)
+	err := mdb.DB.C("user").Find(bson.M{"phone": phone}).One(user)
 	return user, err
 }
 
@@ -89,6 +89,17 @@ func (mdb *MongoDB) UpdateUser(user *models.User) error {
 // AddToBlackList puts blacklist into the blacklist collection
 func (mdb *MongoDB) AddToBlackList(blacklist *models.Blacklist) error {
 	return mdb.DB.C("blacklist").Insert(blacklist)
+}
+
+// TokenInBlacklist checks if token is already in the blacklist collection
+func (mdb *MongoDB) TokenInBlacklist(token *string) bool {
+	blacklist := &struct {
+		Token string //we could remove this though....
+	}{} //Did this so as to allow middleware Authorize use this
+	if err := mdb.DB.C("blacklist").Find(bson.M{"token": *token}).One(blacklist); err != nil {
+		return false
+	}
+	return true
 }
 
 // FindAllUsersExcept returns all the users expcept the one specified in the except parameter

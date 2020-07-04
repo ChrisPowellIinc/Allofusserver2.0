@@ -1,22 +1,24 @@
 package server
 
 import (
-	"encoding/json"
-	"net/http"
-
+	"github.com/ChrisPowellIinc/Allofusserver2.0/servererrors"
 	"github.com/gin-gonic/gin"
+	validator "github.com/go-playground/validator/v10"
 )
 
-func (s *Server) respond(c *gin.Context, message string, status int, data interface{}, errs []string) {
-	responsedata := gin.H{
-		"message": message,
-		"data":    data,
-		"errors":  errs,
-		"status":  http.StatusText(status),
+// decode decodes the body of c into v
+func (s *Server) decode(c *gin.Context, v interface{}) []string {
+	if err := c.ShouldBindJSON(v); err != nil {
+		errs := []string{}
+		verr, ok := err.(validator.ValidationErrors)
+		if ok {
+			for _, fieldErr := range verr {
+				errs = append(errs, servererrors.NewFieldError(fieldErr).String())
+			}
+		} else {
+			errs = append(errs, "internal server error")
+		}
+		return errs
 	}
-	c.JSON(status, responsedata)
-}
-
-func (s *Server) decode(w http.ResponseWriter, r *http.Request, v interface{}) error {
-	return json.NewDecoder(r.Body).Decode(v)
+	return nil
 }
