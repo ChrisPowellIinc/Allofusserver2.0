@@ -1,1 +1,1 @@
-web: GIN_MODE=release bin/Allofusserver2.0
+web: bin/Allofusserver2.0

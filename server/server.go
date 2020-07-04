@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,24 +13,14 @@ import (
 	"github.com/ChrisPowellIinc/Allofusserver2.0/db"
 	"github.com/ChrisPowellIinc/Allofusserver2.0/router"
 	"github.com/ChrisPowellIinc/Allofusserver2.0/server/middleware"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
+// Server serves requests to DB with router
 type Server struct {
 	DB     db.DB
 	Router *router.Router
-}
-
-func (s *Server) respond(w http.ResponseWriter, r *http.Request, data interface{}, status int) {
-	w.WriteHeader(status)
-	if data != nil {
-		_ = json.NewEncoder(w).Encode(data)
-		// TODO: handle err
-	}
-}
-
-func (s *Server) decode(w http.ResponseWriter, r *http.Request, v interface{}) error {
-	return json.NewDecoder(r.Body).Decode(v)
 }
 
 func (s *Server) defineRoutes(router *gin.Engine) {
@@ -40,9 +29,10 @@ func (s *Server) defineRoutes(router *gin.Engine) {
 	apirouter.POST("/auth/login", s.handleLogin())
 
 	authorized := apirouter.Group("/")
-	authorized.Use(middleware.Authorize(s.DB.FindUserByEmail))
+	authorized.Use(middleware.Authorize(s.DB.FindUserByEmail, s.DB.TokenInBlacklist))
+	authorized.POST("/logout", s.handleLogout())
 	authorized.GET("/users", s.handleGetUsers())
-	authorized.PUT("/users", s.handleUpdateUserDetails())
+	authorized.PUT("/me/update", s.handleUpdateUserDetails())
 	authorized.GET("/me", s.handleShowProfile())
 }
 
@@ -71,6 +61,18 @@ func (s *Server) setupRouter() *gin.Engine {
 		)
 	}))
 	r.Use(gin.Recovery())
+	// setup cors
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"*"},
+		AllowMethods:     []string{"POST", "GET", "PUT", "PATCH"},
+		AllowHeaders:     []string{"*"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		// AllowOriginFunc: func(origin string) bool {
+		// 	return origin == "https://github.com"
+		// },
+		MaxAge: 12 * time.Hour,
+	}))
 	s.defineRoutes(r)
 	return r
 }
