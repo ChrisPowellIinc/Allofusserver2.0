@@ -14,6 +14,7 @@ type DB interface {
 	UpdateUser(user *models.User) error
 	AddToBlackList(blacklist *models.Blacklist) error
 	TokenInBlacklist(token *string) bool
+	FindUserByPhone(phone string) (*models.User, error)
 	FindAllUsersExcept(except string) ([]models.User, error)
 }
 
