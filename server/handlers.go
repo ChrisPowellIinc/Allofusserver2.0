@@ -21,15 +21,19 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 	"github.com/globalsign/mgo/bson"
+	validator "github.com/go-playground/validator/v10"
 	"golang.org/x/crypto/bcrypt"
 )
 
 func (s *Server) handleSignup() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		user := &models.User{Status: "active"}
-
-		if errs := s.decode(c, user); errs != nil {
-			response.JSON(c, "", http.StatusBadRequest, nil, errs)
+		var user models.User
+		if err := c.ShouldBindJSON(&user); err != nil {
+			errs := []string{}
+			for _, fieldErr := range err.(validator.ValidationErrors) {
+				errs = append(errs, fieldError{fieldErr}.String())
+			}
+			c.JSON(http.StatusBadRequest, gin.H{"errors": errs})
 			return
 		}
 		var err error
